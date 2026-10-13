@@ -1,4 +1,4 @@
-use std::{collections::HashSet, time::Duration};
+use std::collections::HashSet;
 
 use futures_util::{stream::FuturesUnordered, StreamExt};
 use helix_core::{syntax::config::LanguageServerFeature, Assoc};
@@ -9,38 +9,20 @@ use helix_view::{
     handlers::{lsp::DocumentLinksEvent, Handlers},
     DocumentId, Editor,
 };
-use tokio::time::Instant;
 
 use crate::job;
+use super::document_requests;
 
-#[derive(Default)]
-pub(super) struct DocumentLinksHandler {
-    docs: HashSet<DocumentId>,
-}
-
-const DOCUMENT_CHANGE_DEBOUNCE: Duration = Duration::from_millis(250);
-
-impl helix_event::AsyncHook for DocumentLinksHandler {
-    type Event = DocumentLinksEvent;
-
-    fn handle_event(&mut self, event: Self::Event, _timeout: Option<Instant>) -> Option<Instant> {
-        let DocumentLinksEvent(doc_id) = event;
-        self.docs.insert(doc_id);
-        Some(Instant::now() + DOCUMENT_CHANGE_DEBOUNCE)
+impl document_requests::DocumentRequest for DocumentLinksEvent {
+    fn document_id(self) -> DocumentId {
+        self.0
     }
 
-    fn finish_debounce(&mut self) {
-        let docs = std::mem::take(&mut self.docs);
-
-        job::dispatch_blocking(move |editor, _compositor| {
-            for doc in docs {
-                request_document_links(editor, doc);
-            }
-        });
+    fn request(editor: &mut Editor, doc_id: DocumentId) {
+        request_document_links(editor, doc_id);
     }
 }
 
-/// Request document links for a specific document and cache them for navigation.
 fn request_document_links(editor: &mut Editor, doc_id: DocumentId) {
     let Some(doc) = editor.document_mut(doc_id) else {
         return;
@@ -146,11 +128,7 @@ pub(super) fn register_hooks(handlers: &Handlers) {
     });
 
     register_hook!(move |event: &mut LanguageServerInitialized<'_>| {
-        let doc_ids: Vec<_> = event.editor.documents().map(|doc| doc.id()).collect();
-
-        for doc_id in doc_ids {
-            request_document_links(event.editor, doc_id);
-        }
+        document_requests::request_all::<DocumentLinksEvent>(event.editor);
 
         Ok(())
     });
@@ -162,11 +140,7 @@ pub(super) fn register_hooks(handlers: &Handlers) {
             }
         }
 
-        let doc_ids: Vec<_> = event.editor.documents().map(|doc| doc.id()).collect();
-
-        for doc_id in doc_ids {
-            request_document_links(event.editor, doc_id);
-        }
+        document_requests::request_all::<DocumentLinksEvent>(event.editor);
 
         Ok(())
     });

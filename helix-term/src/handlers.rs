@@ -12,8 +12,7 @@ use crate::handlers::signature_help::SignatureHelpHandler;
 
 pub use helix_view::handlers::{word_index, Handlers};
 
-use self::document_colors::DocumentColorsHandler;
-use self::document_links::DocumentLinksHandler;
+use helix_view::handlers::lsp::{DocumentColorsEvent, DocumentLinksEvent};
 
 mod auto_save;
 mod code_action_hint;
@@ -22,6 +21,7 @@ pub mod diagnostics;
 mod document_colors;
 mod document_highlight;
 mod document_links;
+mod document_requests;
 mod prompt;
 mod signature_help;
 mod snippet;
@@ -34,8 +34,8 @@ pub fn setup(config: Arc<ArcSwap<Config>>) -> Handlers {
     let signature_hints = SignatureHelpHandler::new().spawn();
     let auto_save = AutoSaveHandler::new().spawn();
     let code_action_hint = code_action_hint::Handler::default().spawn();
-    let document_colors = DocumentColorsHandler::default().spawn();
-    let document_links = DocumentLinksHandler::default().spawn();
+    let document_colors = document_requests::DebouncedDocuments::<DocumentColorsEvent>::new().spawn();
+    let document_links = document_requests::DebouncedDocuments::<DocumentLinksEvent>::new().spawn();
     let word_index = word_index::Handler::spawn();
     let pull_diagnostics = PullDiagnosticsHandler::default().spawn();
     let pull_all_documents_diagnostics = PullAllDocumentsDiagnosticHandler::default().spawn();
