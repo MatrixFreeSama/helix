@@ -34,7 +34,8 @@ pub fn setup(config: Arc<ArcSwap<Config>>) -> Handlers {
     let signature_hints = SignatureHelpHandler::new().spawn();
     let auto_save = AutoSaveHandler::new().spawn();
     let code_action_hint = code_action_hint::Handler::default().spawn();
-    let document_colors = document_requests::DebouncedDocuments::<DocumentColorsEvent>::new().spawn();
+    let document_colors =
+        document_requests::DebouncedDocuments::<DocumentColorsEvent>::new().spawn();
     let document_links = document_requests::DebouncedDocuments::<DocumentLinksEvent>::new().spawn();
     let word_index = word_index::Handler::spawn();
     let pull_diagnostics = PullDiagnosticsHandler::default().spawn();
