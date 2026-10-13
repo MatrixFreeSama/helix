@@ -23,6 +23,7 @@ impl document_requests::DocumentRequest for DocumentLinksEvent {
     }
 }
 
+/// Request document links for a specific document and cache them for navigation.
 fn request_document_links(editor: &mut Editor, doc_id: DocumentId) {
     let Some(doc) = editor.document_mut(doc_id) else {
         return;
