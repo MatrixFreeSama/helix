@@ -17,6 +17,7 @@ CASES = [
     ("single_line", "x", 24),
     ("few_lines_no_final_newline", "a\nb\nc", 24),
     ("few_lines_with_final_newline", "a\nb\nc\n", 24),
+    ("unbroken_very_long_line", "x" * 10_000, 24),
     ("very_long_document", "a\n" * 70_000, 24),
 ]
 NAVIGATION = [
