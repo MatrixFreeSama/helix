@@ -90,25 +90,25 @@ pub use crossterm::event::{KeyCode, KeyEvent as Key, KeyModifiers as Modifiers};
 type Keymap = HashMap<Vec<Key>, Command>;
 pub type Keymaps = HashMap<state::Mode, Keymap>;
 
-// Query a single key as a borrowed slice, without allocating a Vec per event.
-// Insert-mode control keys previously ignored modifier bits; preserve that
-// behavior while using the same command registry as normal mode.
+// Centralized dispatch, with zero temporary heap allocation on either mode.
+// Insert-mode controls deliberately ignore modifier bits, matching the original
+// implementation. The existing normal-mode keymap uses borrowed slice lookup.
 #[cfg(feature = "term")]
 #[inline]
 pub fn lookup(keymaps: &Keymaps, mode: state::Mode, event: Key) -> Option<Command> {
-    let key = if mode == state::Mode::Insert
-        && matches!(
-            event.code,
-            KeyCode::Esc | KeyCode::Backspace | KeyCode::Delete | KeyCode::Enter
-        ) {
-        Key {
-            code: event.code,
-            modifiers: Modifiers::NONE,
-        }
-    } else {
-        event
-    };
-    keymaps.get(&mode)?.get(std::slice::from_ref(&key)).copied()
+    match mode {
+        state::Mode::Insert => match event.code {
+            KeyCode::Esc => Some(commands::normal_mode as Command),
+            KeyCode::Backspace => Some(commands::delete_char_backward as Command),
+            KeyCode::Delete => Some(commands::delete_char_forward as Command),
+            KeyCode::Enter => Some(commands::insert_newline as Command),
+            _ => None,
+        },
+        state::Mode::Normal => keymaps
+            .get(&mode)?
+            .get(std::slice::from_ref(&event))
+            .copied(),
+    }
 }
 
 pub fn default() -> Keymaps {
@@ -203,22 +203,6 @@ pub fn default() -> Keymaps {
                     code: KeyCode::Esc,
                     modifiers: Modifiers::NONE
                 }] => commands::normal_mode as Command,
-                vec![Key {
-                    code: KeyCode::Esc,
-                    modifiers: Modifiers::NONE
-                }] => commands::normal_mode as Command,
-                vec![Key {
-                    code: KeyCode::Backspace,
-                    modifiers: Modifiers::NONE
-                }] => commands::delete_char_backward as Command,
-                vec![Key {
-                    code: KeyCode::Delete,
-                    modifiers: Modifiers::NONE
-                }] => commands::delete_char_forward as Command,
-                vec![Key {
-                    code: KeyCode::Enter,
-                    modifiers: Modifiers::NONE
-                }] => commands::insert_newline as Command,
             )
     )
 }
