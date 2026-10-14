@@ -1,0 +1,29 @@
+name: Rebuilt PR1 validation
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [refactor/pr1-zero-alloc-key-dispatch]
+
+jobs:
+  integration-and-stress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout historical Helix
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Compile workspace
+        run: cargo check --workspace --all-features
+      - name: Regression tests including million-key stress
+        run: cargo test --workspace --all-features -- --nocapture
+      - name: 3M-event release performance comparison
+        run: cargo run --release -p helix-view --features term --example keymap_stress
