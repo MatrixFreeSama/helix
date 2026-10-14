@@ -50,9 +50,18 @@ fn main() {
     assert_eq!(old_matches, new_matches);
     assert_eq!(old_matches, 2_400_000);
     println!("Normal mode: {N} input events, matching checksums = {old_matches}");
-    println!("original Vec lookup: {:.3} ms", old_time.as_secs_f64() * 1_000.0);
-    println!("borrowed-slice lookup: {:.3} ms", new_time.as_secs_f64() * 1_000.0);
-    println!("speedup (old/new): {:.3}x", old_time.as_secs_f64() / new_time.as_secs_f64());
+    println!(
+        "original Vec lookup: {:.3} ms",
+        old_time.as_secs_f64() * 1_000.0
+    );
+    println!(
+        "borrowed-slice lookup: {:.3} ms",
+        new_time.as_secs_f64() * 1_000.0
+    );
+    println!(
+        "speedup (old/new): {:.3}x",
+        old_time.as_secs_f64() / new_time.as_secs_f64()
+    );
 
     let mut accepted = 0usize;
     let controls = [
@@ -63,12 +72,18 @@ fn main() {
     ];
     let start = Instant::now();
     for i in 0..N {
-        accepted += black_box(keymap::lookup(
-            black_box(&maps),
-            Mode::Insert,
-            black_box(controls[i % controls.len()]),
-        ).is_some()) as usize;
+        accepted += black_box(
+            keymap::lookup(
+                black_box(&maps),
+                Mode::Insert,
+                black_box(controls[i % controls.len()]),
+            )
+            .is_some(),
+        ) as usize;
     }
     assert_eq!(accepted, N);
-    println!("Insert mode: {N} modified control keys matched in {:.3} ms", start.elapsed().as_secs_f64() * 1_000.0);
+    println!(
+        "Insert mode: {N} modified control keys matched in {:.3} ms",
+        start.elapsed().as_secs_f64() * 1_000.0
+    );
 }
