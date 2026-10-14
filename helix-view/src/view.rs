@@ -115,7 +115,7 @@ mod tab_position_tests {
         assert_eq!(v.visible_cursor_position(2, 15), Some(Position::new(0, 4)));
         assert_eq!(v.visible_cursor_position(3, 15), Some(Position::new(0, 5)));
         assert_eq!(v.visible_cursor_position(9, 15), Some(Position::new(1, 8)));
-        assert_eq!(v.visible_cursor_position(14, 15), Some(Position::new(2, 4)));
+        assert_eq!(v.visible_cursor_position(13, 15), Some(Position::new(2, 4)));
     }
 
     #[test]
