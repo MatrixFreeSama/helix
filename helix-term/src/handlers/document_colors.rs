@@ -173,14 +173,20 @@ pub(super) fn register_hooks(handlers: &Handlers) {
     });
 
     register_hook!(move |event: &mut LanguageServerExited<'_>| {
-        // Clear and re-request all color swatches when a server exits.
-        for doc in event.editor.documents_mut() {
-            if doc.supports_language_server(event.server_id) {
+        // Clear and re-request colors only in documents affected by this server.
+        let affected_documents: Vec<_> = event
+            .editor
+            .documents_mut()
+            .filter(|doc| doc.supports_language_server(event.server_id))
+            .map(|doc| {
                 doc.color_swatches.take();
-            }
-        }
+                doc.id()
+            })
+            .collect();
 
-        document_requests::request_all::<DocumentColorsEvent>(event.editor);
+        for doc_id in affected_documents {
+            request_document_colors(event.editor, doc_id);
+        }
 
         Ok(())
     });
