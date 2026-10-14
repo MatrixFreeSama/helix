@@ -198,24 +198,26 @@ impl Editor {
                                         style
                                     };
 
-                                    // Render blank tab cells with the current selection style.
-                                    if grapheme == "\t" {
-                                        self.surface.set_stringn(
-                                            offset + visual_x,
-                                            line,
-                                            "    ",
-                                            width as usize,
-                                            style,
-                                        );
-                                    } else {
-                                        self.surface.set_string(
-                                            offset + visual_x,
-                                            line,
-                                            grapheme,
-                                            style,
-                                        );
+                                    // The viewport is a hard screen boundary. Never hand
+                                    // offscreen x coordinates to tui::Buffer (it may panic).
+                                    // A partially visible tab is blank-filled; a wide
+                                    // grapheme is painted only if all its cells fit.
+                                    if visual_x < viewport.width {
+                                        let remaining = viewport.width - visual_x;
+                                        let screen_x = offset + visual_x;
+                                        if grapheme == "\t" {
+                                            self.surface.set_stringn(
+                                                screen_x,
+                                                line,
+                                                "    ",
+                                                remaining.min(width) as usize,
+                                                style,
+                                            );
+                                        } else if width <= remaining {
+                                            self.surface
+                                                .set_string(screen_x, line, grapheme, style);
+                                        }
                                     }
-
                                     visual_x = visual_x.saturating_add(width);
                                 }
 
