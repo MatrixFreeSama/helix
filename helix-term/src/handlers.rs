@@ -7,12 +7,11 @@ use helix_event::AsyncHook;
 use crate::config::Config;
 use crate::events;
 use crate::handlers::auto_save::AutoSaveHandler;
-use crate::handlers::diagnostics::PullDiagnosticsHandler;
 use crate::handlers::signature_help::SignatureHelpHandler;
 
 pub use helix_view::handlers::{word_index, Handlers};
 
-use helix_view::handlers::lsp::{DocumentColorsEvent, DocumentLinksEvent};
+use helix_view::handlers::lsp::{DocumentColorsEvent, DocumentLinksEvent, PullDiagnosticsEvent};
 
 mod auto_save;
 mod code_action_hint;
@@ -38,7 +37,8 @@ pub fn setup(config: Arc<ArcSwap<Config>>) -> Handlers {
         document_requests::DebouncedDocuments::<DocumentColorsEvent>::new().spawn();
     let document_links = document_requests::DebouncedDocuments::<DocumentLinksEvent>::new().spawn();
     let word_index = word_index::Handler::spawn();
-    let pull_diagnostics = PullDiagnosticsHandler::default().spawn();
+    let pull_diagnostics =
+        document_requests::DebouncedDocuments::<PullDiagnosticsEvent>::new().spawn();
     let pull_all_documents_diagnostics = PullAllDocumentsDiagnosticHandler::default().spawn();
 
     let handlers = Handlers {
