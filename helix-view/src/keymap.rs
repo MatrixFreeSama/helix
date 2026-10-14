@@ -109,6 +109,17 @@ pub fn lookup(keymaps: &Keymaps, mode: state::Mode, event: Key) -> Option<Comman
             .get(&mode)?
             .get(std::slice::from_ref(&event))
             .copied(),
+        // Goto is a one-key continuation, not another heap-allocated keymap.
+        state::Mode::Goto => {
+            if event.modifiers != Modifiers::NONE {
+                return Some(commands::normal_mode as Command);
+            }
+            Some(match event.code {
+                KeyCode::Char('g') => commands::move_file_start as Command,
+                KeyCode::Char('e') => commands::move_file_end as Command,
+                _ => commands::normal_mode as Command,
+            })
+        },
     }
 }
 
@@ -168,6 +179,26 @@ pub fn default() -> Keymaps {
                     code: KeyCode::Char('e'),
                     modifiers: Modifiers::NONE
                 }] => commands::move_next_word_end as Command,
+                vec![Key {
+                    code: KeyCode::Char('g'),
+                    modifiers: Modifiers::NONE
+                }] => commands::goto_mode as Command,
+                vec![Key {
+                    code: KeyCode::PageUp,
+                    modifiers: Modifiers::NONE
+                }] => commands::page_up as Command,
+                vec![Key {
+                    code: KeyCode::PageDown,
+                    modifiers: Modifiers::NONE
+                }] => commands::page_down as Command,
+                vec![Key {
+                    code: KeyCode::Char('u'),
+                    modifiers: Modifiers::CONTROL
+                }] => commands::half_page_up as Command,
+                vec![Key {
+                    code: KeyCode::Char('d'),
+                    modifiers: Modifiers::CONTROL
+                }] => commands::half_page_down as Command,
                 vec![Key {
                     code: KeyCode::Char('i'),
                     modifiers: Modifiers::NONE
@@ -261,6 +292,25 @@ mod test {
             key(KeyCode::Char('x'), Modifiers::NONE)
         )
         .is_none());
+    }
+
+    #[test]
+    fn goto_is_a_single_continuation_and_falls_back_to_normal() {
+        let maps = default();
+        for (code, expected) in [
+            (KeyCode::Char('g'), commands::move_file_start as Command),
+            (KeyCode::Char('e'), commands::move_file_end as Command),
+            (KeyCode::Esc, commands::normal_mode as Command),
+            (KeyCode::Char('x'), commands::normal_mode as Command),
+        ].iter().copied() {
+            let cmd = lookup(&maps, state::Mode::Goto, key(code, Modifiers::NONE)).unwrap();
+            assert_eq!(cmd as usize, expected as usize);
+        }
+        let cmd = lookup(&maps, state::Mode::Goto, key(KeyCode::Char('g'), Modifiers::CONTROL)).unwrap();
+        assert_eq!(cmd as usize, commands::normal_mode as Command);
+        for code in [KeyCode::PageUp, KeyCode::PageDown] {
+            assert!(lookup(&maps, state::Mode::Normal, key(code, Modifiers::NONE)).is_some());
+        }
     }
 
     #[test]
