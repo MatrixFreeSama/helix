@@ -100,8 +100,7 @@ pub fn lookup(keymaps: &Keymaps, mode: state::Mode, event: Key) -> Option<Comman
         && matches!(
             event.code,
             KeyCode::Esc | KeyCode::Backspace | KeyCode::Delete | KeyCode::Enter
-        )
-    {
+        ) {
         Key {
             code: event.code,
             modifiers: Modifiers::NONE,
@@ -237,12 +236,18 @@ mod test {
         let maps = default();
         let controls = [
             (KeyCode::Esc, commands::normal_mode as Command),
-            (KeyCode::Backspace, commands::delete_char_backward as Command),
+            (
+                KeyCode::Backspace,
+                commands::delete_char_backward as Command,
+            ),
             (KeyCode::Delete, commands::delete_char_forward as Command),
             (KeyCode::Enter, commands::insert_newline as Command),
         ];
         for (code, expected) in controls.iter().copied() {
-            for modifiers in [Modifiers::NONE, Modifiers::SHIFT, Modifiers::CONTROL].iter().copied() {
+            for modifiers in [Modifiers::NONE, Modifiers::SHIFT, Modifiers::CONTROL]
+                .iter()
+                .copied()
+            {
                 let resolved = lookup(&maps, state::Mode::Insert, key(code, modifiers)).unwrap();
                 assert_eq!(resolved as usize, expected as usize);
             }
@@ -252,9 +257,24 @@ mod test {
     #[test]
     fn normal_commands_still_require_exact_modifiers() {
         let maps = default();
-        assert!(lookup(&maps, state::Mode::Normal, key(KeyCode::Char('h'), Modifiers::NONE)).is_some());
-        assert!(lookup(&maps, state::Mode::Normal, key(KeyCode::Char('h'), Modifiers::SHIFT)).is_none());
-        assert!(lookup(&maps, state::Mode::Insert, key(KeyCode::Char('x'), Modifiers::NONE)).is_none());
+        assert!(lookup(
+            &maps,
+            state::Mode::Normal,
+            key(KeyCode::Char('h'), Modifiers::NONE)
+        )
+        .is_some());
+        assert!(lookup(
+            &maps,
+            state::Mode::Normal,
+            key(KeyCode::Char('h'), Modifiers::SHIFT)
+        )
+        .is_none());
+        assert!(lookup(
+            &maps,
+            state::Mode::Insert,
+            key(KeyCode::Char('x'), Modifiers::NONE)
+        )
+        .is_none());
     }
 
     #[test]
@@ -263,10 +283,19 @@ mod test {
         let mut commands = 0usize;
         for i in 0..1_000_000 {
             let (mode, event) = match i % 4 {
-                0 => (state::Mode::Normal, key(KeyCode::Char('h'), Modifiers::NONE)),
+                0 => (
+                    state::Mode::Normal,
+                    key(KeyCode::Char('h'), Modifiers::NONE),
+                ),
                 1 => (state::Mode::Insert, key(KeyCode::Enter, Modifiers::SHIFT)),
-                2 => (state::Mode::Insert, key(KeyCode::Backspace, Modifiers::CONTROL)),
-                _ => (state::Mode::Insert, key(KeyCode::Char('a'), Modifiers::NONE)),
+                2 => (
+                    state::Mode::Insert,
+                    key(KeyCode::Backspace, Modifiers::CONTROL),
+                ),
+                _ => (
+                    state::Mode::Insert,
+                    key(KeyCode::Char('a'), Modifiers::NONE),
+                ),
             };
             commands += lookup(&maps, mode, event).is_some() as usize;
         }
