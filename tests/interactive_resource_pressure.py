@@ -21,7 +21,7 @@ import termios
 import time
 
 MAX_ACK_SECONDS = 8.0  # Only a broken/unresponsive editor fails this timeout.
-SAMPLES_PER_PHASE = 56
+SAMPLES_PER_PHASE = 200
 RESULTS = {"runner_cpus": [], "scenarios": {}, "diagnostics": [], "failures": []}
 
 
@@ -164,6 +164,23 @@ def available_memory_mib():
             return int(line.split()[1]) // 1024
     return 1024
 
+def memory_pressure_budget_mib():
+    available = available_memory_mib()
+    cgroup_max = pathlib.Path("/sys/fs/cgroup/memory.max")
+    if cgroup_max.exists():
+        content = cgroup_max.read_text().strip()
+        if content.isdigit():
+            available = min(available, int(content) // (1024 * 1024))
+    # Use up to one quarter of a bounded, observed memory budget.
+    return max(128, min(3072, available // 4))
+
+
+def resident_mib(pid):
+    for line in (pathlib.Path("/proc") / str(pid) / "status").read_text().splitlines():
+        if line.startswith("VmRSS:"):
+            return int(line.split()[1]) // 1024
+    return 0
+
 
 def main(binary):
     cpus = sorted(os.sched_getaffinity(0))
@@ -202,17 +219,26 @@ def main(binary):
                 set_affinity_all(proc.pid, set(cpus))
                 input_phase("cpu_restored", master, proc, 24)
 
-                memory_mib = min(768, max(128, available_memory_mib() // 12))
-                RESULTS["memory_pressure_mib"] = memory_mib
+                memory_mib = memory_pressure_budget_mib()
+                RESULTS["memory_pressure_target_mib"] = memory_mib
                 load_file = str(pathlib.Path(tmp) / "bounded_io_pressure.dat")
-                for i in range(max(2, min(8, len(cpus) * 2))):
+                cpu_workers = max(2, min(8, len(cpus) * 2))
+                RESULTS["cpu_contenders"] = cpu_workers
+                for i in range(cpu_workers):
                     workers.append(worker_process("cpu", cpus[i % len(cpus)], memory_mib, load_file))
-                workers.append(worker_process("memory", cpus[0], memory_mib, load_file))
+                memory_worker = worker_process("memory", cpus[0], memory_mib, load_file)
+                workers.append(memory_worker)
                 workers.append(worker_process("io", cpus[-1], memory_mib, load_file))
-                time.sleep(0.5)
+                for attempt in range(40):
+                    if all(worker.poll() is None for worker in workers) and resident_mib(memory_worker.pid) >= memory_mib * 0.8:
+                        break
+                    time.sleep(0.2)
                 for worker in workers:
                     if worker.poll() is not None:
                         raise RuntimeError("resource contender exited before load test")
+                RESULTS["memory_contender_rss_mib"] = resident_mib(memory_worker.pid)
+                if RESULTS["memory_contender_rss_mib"] < memory_mib * 0.8:
+                    raise RuntimeError("memory contention did not actually allocate target pages")
                 input_phase("cpu_memory_io_contention", master, proc)
                 set_affinity_all(proc.pid, {cpus[0]})
                 input_phase("cpu_withdrawal_under_contention", master, proc)
