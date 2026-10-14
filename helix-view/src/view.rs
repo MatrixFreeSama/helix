@@ -49,6 +49,10 @@ impl View {
         (self.size.1 as usize).saturating_sub(1).max(1)
     }
 
+    pub fn cursor_padding(&self) -> usize {
+        5usize.min((self.text_rows() - 1) / 2)
+    }
+
     pub fn ensure_cursor_in_view(&mut self) {
         let line = self
             .state
@@ -59,7 +63,7 @@ impl View {
         self.first_line = self.first_line.min(max_first);
 
         // Padding can never push the viewport beyond either document edge.
-        let padding = 5usize.min((visible - 1) / 2);
+        let padding = self.cursor_padding();
         let last_comfortable = self.first_line.saturating_add(visible - 1 - padding);
         if line > last_comfortable {
             self.first_line = line.saturating_sub(visible - 1 - padding).min(max_first);

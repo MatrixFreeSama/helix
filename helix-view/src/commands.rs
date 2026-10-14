@@ -151,14 +151,19 @@ fn scroll(view: &mut View, rows: usize, down: bool) {
     } else {
         view.first_line.saturating_sub(rows)
     };
-    view.first_line = next.min(max_first);
-    let cursor = view.state.selection().cursor();
-    let line = view.state.doc().char_to_line(cursor);
-    let first = view.first_line;
-    let last = first
+    let first = next.min(max_first);
+    if first == view.first_line {
+        return;
+    }
+    view.first_line = first;
+    let line = view.state.doc().char_to_line(view.state.selection().cursor());
+    let padding = view.cursor_padding();
+    let low = first.saturating_add(padding);
+    let high = first
         .saturating_add(visible - 1)
-        .min(total.saturating_sub(1));
-    let target = line.max(first).min(last);
+        .min(total.saturating_sub(1))
+        .saturating_sub(padding);
+    let target = line.max(low).min(high);
     if target != line {
         let pos = view.state.doc().line_to_char(target);
         view.state.selection = Selection::single(pos, pos);
@@ -440,13 +445,23 @@ mod navigation_tests {
             .map(|n| format!("line {}\n", n))
             .collect::<String>();
         let mut v = view(&text, 18);
-        for _ in 0..100 {
+        page_down(&mut v, 1);
+        assert_eq!(v.first_line, 17);
+        v.ensure_cursor_in_view();
+        assert_eq!(v.first_line, 17); // no post-page padding rollback
+        for _ in 1..100 {
             page_down(&mut v, 1);
+            let first = v.first_line;
+            v.ensure_cursor_in_view();
+            assert_eq!(v.first_line, first);
         }
         let last = v.first_line;
         assert!(last > 100);
         for _ in 0..100 {
             half_page_up(&mut v, 1);
+            let first = v.first_line;
+            v.ensure_cursor_in_view();
+            assert_eq!(v.first_line, first);
         }
         assert!(v.first_line < last);
         move_file_end(&mut v, 1);
