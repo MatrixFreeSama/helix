@@ -88,7 +88,29 @@ pub use crossterm::event::{KeyCode, KeyEvent as Key, KeyModifiers as Modifiers};
 
 // TODO: could be trie based
 type Keymap = HashMap<Vec<Key>, Command>;
-type Keymaps = HashMap<state::Mode, Keymap>;
+pub type Keymaps = HashMap<state::Mode, Keymap>;
+
+// Query a single key as a borrowed slice, without allocating a Vec per event.
+// Insert-mode control keys previously ignored modifier bits; preserve that
+// behavior while using the same command registry as normal mode.
+#[cfg(feature = "term")]
+#[inline]
+pub fn lookup(keymaps: &Keymaps, mode: state::Mode, event: Key) -> Option<Command> {
+    let key = if mode == state::Mode::Insert
+        && matches!(
+            event.code,
+            KeyCode::Esc | KeyCode::Backspace | KeyCode::Delete | KeyCode::Enter
+        )
+    {
+        Key {
+            code: event.code,
+            modifiers: Modifiers::NONE,
+        }
+    } else {
+        event
+    };
+    keymaps.get(&mode)?.get(std::slice::from_ref(&key)).copied()
+}
 
 pub fn default() -> Keymaps {
     hashmap!(
@@ -182,6 +204,72 @@ pub fn default() -> Keymaps {
                     code: KeyCode::Esc,
                     modifiers: Modifiers::NONE
                 }] => commands::normal_mode as Command,
+                vec![Key {
+                    code: KeyCode::Esc,
+                    modifiers: Modifiers::NONE
+                }] => commands::normal_mode as Command,
+                vec![Key {
+                    code: KeyCode::Backspace,
+                    modifiers: Modifiers::NONE
+                }] => commands::delete_char_backward as Command,
+                vec![Key {
+                    code: KeyCode::Delete,
+                    modifiers: Modifiers::NONE
+                }] => commands::delete_char_forward as Command,
+                vec![Key {
+                    code: KeyCode::Enter,
+                    modifiers: Modifiers::NONE
+                }] => commands::insert_newline as Command,
             )
     )
+}
+
+#[cfg(all(test, feature = "term"))]
+mod test {
+    use super::*;
+
+    fn key(code: KeyCode, modifiers: Modifiers) -> Key {
+        Key { code, modifiers }
+    }
+
+    #[test]
+    fn insert_commands_keep_original_modifier_independence() {
+        let maps = default();
+        let controls = [
+            (KeyCode::Esc, commands::normal_mode as Command),
+            (KeyCode::Backspace, commands::delete_char_backward as Command),
+            (KeyCode::Delete, commands::delete_char_forward as Command),
+            (KeyCode::Enter, commands::insert_newline as Command),
+        ];
+        for (code, expected) in controls.iter().copied() {
+            for modifiers in [Modifiers::NONE, Modifiers::SHIFT, Modifiers::CONTROL].iter().copied() {
+                let resolved = lookup(&maps, state::Mode::Insert, key(code, modifiers)).unwrap();
+                assert_eq!(resolved as usize, expected as usize);
+            }
+        }
+    }
+
+    #[test]
+    fn normal_commands_still_require_exact_modifiers() {
+        let maps = default();
+        assert!(lookup(&maps, state::Mode::Normal, key(KeyCode::Char('h'), Modifiers::NONE)).is_some());
+        assert!(lookup(&maps, state::Mode::Normal, key(KeyCode::Char('h'), Modifiers::SHIFT)).is_none());
+        assert!(lookup(&maps, state::Mode::Insert, key(KeyCode::Char('x'), Modifiers::NONE)).is_none());
+    }
+
+    #[test]
+    fn million_events_match_expected_dispatch() {
+        let maps = default();
+        let mut commands = 0usize;
+        for i in 0..1_000_000 {
+            let (mode, event) = match i % 4 {
+                0 => (state::Mode::Normal, key(KeyCode::Char('h'), Modifiers::NONE)),
+                1 => (state::Mode::Insert, key(KeyCode::Enter, Modifiers::SHIFT)),
+                2 => (state::Mode::Insert, key(KeyCode::Backspace, Modifiers::CONTROL)),
+                _ => (state::Mode::Insert, key(KeyCode::Char('a'), Modifiers::NONE)),
+            };
+            commands += lookup(&maps, mode, event).is_some() as usize;
+        }
+        assert_eq!(commands, 750_000);
+    }
 }
