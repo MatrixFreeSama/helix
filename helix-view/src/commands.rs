@@ -156,7 +156,10 @@ fn scroll(view: &mut View, rows: usize, down: bool) {
         return;
     }
     view.first_line = first;
-    let line = view.state.doc().char_to_line(view.state.selection().cursor());
+    let line = view
+        .state
+        .doc()
+        .char_to_line(view.state.selection().cursor());
     let padding = view.cursor_padding();
     let low = first.saturating_add(padding);
     let high = first
