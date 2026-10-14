@@ -1,6 +1,6 @@
 use crate::Args;
-use helix_core::{state::coords_at_pos, state::Mode, syntax::HighlightEvent, Range, State};
-use helix_view::{commands, keymap, View};
+use helix_core::{state::Mode, syntax::HighlightEvent, Range, State};
+use helix_view::{commands, keymap, view::display_grapheme_width, View};
 
 use std::{
     borrow::Cow,
@@ -80,7 +80,15 @@ impl Editor {
                     .set_style(area, view.theme.get("ui.background").into());
 
                 let offset = 5 + 1; // 5 linenr + 1 gutter
-                let viewport = Rect::new(offset, 0, self.size.0, self.size.1 - 1); // - 1 for statusline
+                let viewport = Rect::new(
+                    offset,
+                    0,
+                    self.size.0.saturating_sub(offset),
+                    self.size.1.saturating_sub(1),
+                ); // - 1 for statusline
+                if viewport.height == 0 || viewport.width == 0 {
+                    return;
+                }
 
                 // TODO: inefficient, should feed chunks.iter() to tree_sitter.parse_with(|offset, pos|)
                 let source_code = view.state.doc().to_string();
@@ -147,7 +155,7 @@ impl Editor {
 
                             let text = view.state.doc().slice(start..end);
 
-                            use helix_core::graphemes::{grapheme_width, RopeGraphemes};
+                            use helix_core::graphemes::RopeGraphemes;
 
                             let style = match spans.first() {
                                 Some(span) => {
@@ -175,10 +183,10 @@ impl Editor {
                                         break 'outer;
                                     }
                                 } else {
-                                    // Cow will prevent allocations if span contained in a single slice
-                                    // which should really be the majority case
-                                    let grapheme = Cow::from(grapheme);
-                                    let width = grapheme_width(&grapheme) as u16;
+                                    // Borrow from rope chunks when possible.
+                                    let grapheme: Cow<str> = Cow::from(grapheme);
+                                    let width =
+                                        display_grapheme_width(&grapheme, visual_x as usize) as u16;
 
                                     let style = if visible_selections
                                         .iter()
@@ -190,18 +198,26 @@ impl Editor {
                                         style
                                     };
 
-                                    // TODO: paint cursor heads except primary
+                                    // Render blank tab cells with the current selection style.
+                                    if grapheme == "\t" {
+                                        self.surface.set_stringn(
+                                            offset + visual_x,
+                                            line,
+                                            "    ",
+                                            width as usize,
+                                            style,
+                                        );
+                                    } else {
+                                        self.surface.set_string(
+                                            offset + visual_x,
+                                            line,
+                                            grapheme,
+                                            style,
+                                        );
+                                    }
 
-                                    self.surface.set_string(
-                                        offset + visual_x,
-                                        line,
-                                        grapheme,
-                                        style,
-                                    );
-
-                                    visual_x += width;
+                                    visual_x = visual_x.saturating_add(width);
                                 }
-                                // if grapheme == "\t"
 
                                 char_index += 1;
                             }
@@ -271,16 +287,20 @@ impl Editor {
                     Mode::Normal => write!(stdout, "\x1B[2 q"),
                 };
 
-                // render the cursor
+                // The position is already viewport-relative: do not subtract
+                // first_line again, and hide the cursor when it is offscreen.
                 let pos = view.state.selection().cursor();
-                let coords = coords_at_pos(&view.state.doc().slice(..), pos);
-                execute!(
-                    stdout,
-                    cursor::MoveTo(
-                        coords.col as u16 + viewport.x,
-                        coords.row as u16 - view.first_line + viewport.y,
-                    )
-                );
+                if let Some(coords) = view.visible_cursor_position(pos, viewport.height) {
+                    let x = coords.col.saturating_add(viewport.x as usize);
+                    let y = coords.row.saturating_add(viewport.y as usize);
+                    if x < self.size.0 as usize && y < viewport.height as usize {
+                        execute!(stdout, cursor::Show, cursor::MoveTo(x as u16, y as u16));
+                    } else {
+                        execute!(stdout, cursor::Hide);
+                    }
+                } else {
+                    execute!(stdout, cursor::Hide);
+                }
             }
             None => (),
         }

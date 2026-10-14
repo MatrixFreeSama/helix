@@ -284,6 +284,10 @@ pub fn insert_newline(view: &mut View, _count: usize) {
     insert_char(view, '\n');
 }
 
+pub fn insert_tab(view: &mut View, _count: usize) {
+    insert_char(view, '\t');
+}
+
 // TODO: handle indent-aware delete
 pub fn delete_char_backward(view: &mut View, count: usize) {
     let text = &view.state.doc.slice(..);
