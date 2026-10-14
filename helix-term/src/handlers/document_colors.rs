@@ -11,8 +11,8 @@ use helix_view::{
     DocumentId, Editor, Theme,
 };
 
-use crate::job;
 use super::document_requests;
+use crate::job;
 
 impl document_requests::DocumentRequest for DocumentColorsEvent {
     fn document_id(self) -> DocumentId {
