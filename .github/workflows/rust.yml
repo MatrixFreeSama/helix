@@ -1,6 +1,9 @@
 name: Build and key-dispatch stress
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches: [master]
 
 jobs:
   integration-and-stress:
