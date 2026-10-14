@@ -1,0 +1,62 @@
+name: Fork PR dirty validation
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/pr-dirty-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-pr-dirty-validation
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    name: ${{ matrix.version }} full Rust & integration suite
+    if: github.repository == 'MatrixFreeSama/helix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: baseline
+            ref: master
+          - version: draft-pr-1
+            ref: refactor/converge-document-requests
+
+    steps:
+      - name: Check out comparison target
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+
+      - name: Set up Rust using the project's toolchain policy
+        uses: ./.github/actions/rust-setup
+        with:
+          toolchain: '1.90'
+          cache-key: dirty-${{ matrix.version }}
+          cache-grammars: 'true'
+
+      - name: Compile whole workspace
+        run: cargo check --workspace
+
+      - name: Run all workspace tests
+        run: cargo test --workspace
+
+      - name: Run real editor integration tests
+        run: cargo integration-test
+
+      - name: Run LSP request burst regressions on PR branch
+        if: matrix.version == 'draft-pr-1'
+        run: cargo test -p helix-term --lib document_requests::tests -- --nocapture
+
+      - name: Check formatting
+        if: always()
+        run: cargo fmt --all --check
