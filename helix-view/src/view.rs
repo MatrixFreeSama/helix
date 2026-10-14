@@ -139,4 +139,3 @@ mod tab_position_tests {
         assert_eq!(v.first_line, 0);
     }
 }
-
