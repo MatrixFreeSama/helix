@@ -155,7 +155,9 @@ fn scroll(view: &mut View, rows: usize, down: bool) {
     let cursor = view.state.selection().cursor();
     let line = view.state.doc().char_to_line(cursor);
     let first = view.first_line;
-    let last = first.saturating_add(visible - 1).min(total.saturating_sub(1));
+    let last = first
+        .saturating_add(visible - 1)
+        .min(total.saturating_sub(1));
     let target = line.max(first).min(last);
     if target != line {
         let pos = view.state.doc().line_to_char(target);
@@ -380,8 +382,8 @@ pub fn delete_char_forward(view: &mut View, count: usize) {
 #[cfg(test)]
 mod navigation_tests {
     use super::*;
-    use helix_core::Rope;
     use crate::theme::Theme;
+    use helix_core::Rope;
 
     fn view(doc: &str, height: u16) -> View {
         View {
@@ -434,7 +436,9 @@ mod navigation_tests {
 
     #[test]
     fn long_files_scroll_both_directions_and_recover() {
-        let text = (0..1000).map(|n| format!("line {}\n", n)).collect::<String>();
+        let text = (0..1000)
+            .map(|n| format!("line {}\n", n))
+            .collect::<String>();
         let mut v = view(&text, 18);
         for _ in 0..100 {
             page_down(&mut v, 1);
@@ -447,8 +451,13 @@ mod navigation_tests {
         assert!(v.first_line < last);
         move_file_end(&mut v, 1);
         v.ensure_cursor_in_view();
-        assert_eq!(v.state.doc().char_to_line(v.state.selection().cursor()), 999);
-        assert!(v.visible_cursor_position(v.state.selection().cursor(), 17).is_some());
+        assert_eq!(
+            v.state.doc().char_to_line(v.state.selection().cursor()),
+            999
+        );
+        assert!(v
+            .visible_cursor_position(v.state.selection().cursor(), 17)
+            .is_some());
         move_file_start(&mut v, 1);
         v.ensure_cursor_in_view();
         assert_eq!(v.first_line, 0);
@@ -461,6 +470,8 @@ mod navigation_tests {
         move_file_end(&mut v, 1);
         v.ensure_cursor_in_view();
         assert!(v.first_line > u16::MAX as usize);
-        assert!(v.visible_cursor_position(v.state.selection().cursor(), 17).is_some());
+        assert!(v
+            .visible_cursor_position(v.state.selection().cursor(), 17)
+            .is_some());
     }
 }

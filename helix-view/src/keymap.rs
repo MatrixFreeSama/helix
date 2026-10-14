@@ -119,7 +119,7 @@ pub fn lookup(keymaps: &Keymaps, mode: state::Mode, event: Key) -> Option<Comman
                 KeyCode::Char('e') => commands::move_file_end as Command,
                 _ => commands::normal_mode as Command,
             })
-        },
+        }
     }
 }
 
@@ -302,11 +302,19 @@ mod test {
             (KeyCode::Char('e'), commands::move_file_end as Command),
             (KeyCode::Esc, commands::normal_mode as Command),
             (KeyCode::Char('x'), commands::normal_mode as Command),
-        ].iter().copied() {
+        ]
+        .iter()
+        .copied()
+        {
             let cmd = lookup(&maps, state::Mode::Goto, key(code, Modifiers::NONE)).unwrap();
             assert_eq!(cmd as usize, expected as usize);
         }
-        let cmd = lookup(&maps, state::Mode::Goto, key(KeyCode::Char('g'), Modifiers::CONTROL)).unwrap();
+        let cmd = lookup(
+            &maps,
+            state::Mode::Goto,
+            key(KeyCode::Char('g'), Modifiers::CONTROL),
+        )
+        .unwrap();
         assert_eq!(cmd as usize, commands::normal_mode as Command);
         for code in [KeyCode::PageUp, KeyCode::PageDown] {
             assert!(lookup(&maps, state::Mode::Normal, key(code, Modifiers::NONE)).is_some());

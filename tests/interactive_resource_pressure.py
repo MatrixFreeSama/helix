@@ -156,10 +156,10 @@ def navigation_phase(name, fd, proc):
     sequence = [
         b"g", b"g",     # gg: first substantive line
         b"g", b"e",     # ge: last substantive line
-        b"\\x1b[5~",   # PageUp
-        b"\\x1b[6~",   # PageDown
-        b"\\x15",      # Ctrl+U
-        b"\\x04",      # Ctrl+D
+        b"\x1b[5~",   # PageUp
+        b"\x1b[6~",   # PageDown
+        b"\x15",      # Ctrl+U
+        b"\x04",      # Ctrl+D
         b"g", b"x",     # unknown Goto continuation must not trap modal state
         b"g", b"g",
         b"i",          # return to Insert for the next input-stress phase
@@ -172,7 +172,7 @@ def input_phase(name, fd, proc, count=SAMPLES_PER_PHASE):
     latencies = []
     for i in range(count):
         # Do not send 'q': the historical editor treats it as global Quit.
-        raw = b"\\t" if i % 11 == 0 else b"\\r" if i % 17 == 0 else b"a"
+        raw = b"\t" if i % 11 == 0 else b"\r" if i % 17 == 0 else b"a"
         latencies.append(press(fd, proc, raw))
     record(name, latencies)
 
@@ -210,7 +210,7 @@ def main(binary):
     # tree-sitter configurations into this input/terminal regression.
     with tempfile.TemporaryDirectory(prefix="helix-dirty-") as tmp:
         file = pathlib.Path(tmp) / "fixture.txt"
-        file.write_text("start\\n" + "".join("line %03d  ab\\tcd\\n" % n for n in range(60)))
+        file.write_text("start\n" + "".join("line %03d  ab\tcd\n" % n for n in range(60)))
         master, slave = pty.openpty()
         resize(slave, 30, 100)
         env = os.environ.copy()
@@ -261,7 +261,7 @@ def main(binary):
                 input_phase("cpu_memory_io_contention", master, proc)
                 set_affinity_all(proc.pid, {cpus[0]})
                 input_phase("cpu_withdrawal_under_contention", master, proc)
-                press(master, proc, b"\\x1b")  # Leave insert mode for Goto under pressure.
+                press(master, proc, b"\x1b")  # Leave insert mode for Goto under pressure.
                 navigation_phase("goto_and_page_under_contention", master, proc)
                 set_affinity_all(proc.pid, set(cpus))
                 stop_workers(workers)
@@ -305,6 +305,6 @@ if __name__ == "__main__":
         print("DIRTY_BUSINESS_FAILURE " + repr(exc), file=sys.stderr, flush=True)
     finally:
         pathlib.Path("dirty-business-results.json").write_text(
-            json.dumps(RESULTS, indent=2, ensure_ascii=False) + "\\n")
+            json.dumps(RESULTS, indent=2, ensure_ascii=False) + "\n")
         print("DIRTY_BUSINESS_SUMMARY " + json.dumps(RESULTS, ensure_ascii=False), flush=True)
     sys.exit(1 if RESULTS["failures"] else 0)

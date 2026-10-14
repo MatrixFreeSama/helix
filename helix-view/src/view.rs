@@ -50,7 +50,10 @@ impl View {
     }
 
     pub fn ensure_cursor_in_view(&mut self) {
-        let line = self.state.doc().char_to_line(self.state.selection().cursor());
+        let line = self
+            .state
+            .doc()
+            .char_to_line(self.state.selection().cursor());
         let visible = self.text_rows();
         let max_first = self.state.doc().len_lines().saturating_sub(visible);
         self.first_line = self.first_line.min(max_first);

@@ -227,8 +227,13 @@ impl Editor {
 
                 let style: Style = view.theme.get("ui.linenr").into();
                 for (screen_row, line) in (view.first_line..=last_line).enumerate() {
-                    self.surface
-                        .set_stringn(0, screen_row as u16, format!("{:>5}", line + 1), 5, style);
+                    self.surface.set_stringn(
+                        0,
+                        screen_row as u16,
+                        format!("{:>5}", line + 1),
+                        5,
+                        style,
+                    );
                 }
 
                 // let lines = state
