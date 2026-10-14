@@ -222,11 +222,15 @@ def main(binary):
                 input_phase("recovered_after_resource_release", master, proc)
 
                 resize(master, 10, 30)
+                os.kill(proc.pid, signal.SIGWINCH)
                 input_phase("terminal_resize_small", master, proc, 20)
                 resize(master, 30, 100)
+                os.kill(proc.pid, signal.SIGWINCH)
                 input_phase("terminal_resize_recovered", master, proc, 20)
 
-                press(master, proc, b"q")
+                # Quit intentionally ends the process; do not demand an ACK
+                # from a PTY that may close before we can read its last frame.
+                os.write(master, b"q")
                 proc.wait(timeout=10)
                 if proc.returncode != 0:
                     raise RuntimeError("hx did not exit cleanly: " + str(proc.returncode))
