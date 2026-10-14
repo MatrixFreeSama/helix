@@ -318,47 +318,24 @@ impl Editor {
                 }
                 Some(Ok(Event::Key(event))) => {
                     if let Some(view) = &mut self.view {
-                        match view.state.mode() {
-                            Mode::Insert => {
-                                match event {
-                                    KeyEvent {
-                                        code: KeyCode::Esc, ..
-                                    } => commands::normal_mode(view, 1),
-                                    KeyEvent {
-                                        code: KeyCode::Backspace,
-                                        ..
-                                    } => commands::delete_char_backward(view, 1),
-                                    KeyEvent {
-                                        code: KeyCode::Delete,
-                                        ..
-                                    } => commands::delete_char_forward(view, 1),
-                                    KeyEvent {
-                                        code: KeyCode::Char(c),
-                                        ..
-                                    } => commands::insert_char(view, c),
-                                    KeyEvent {
-                                        code: KeyCode::Enter,
-                                        ..
-                                    } => commands::insert_char(view, '\n'),
-                                    _ => (), // skip
-                                }
-                                // TODO: simplistic ensure cursor in view for now
+                        let mode = view.state.mode();
+                        if let Some(command) = keymap::lookup(&keymap, mode, event) {
+                            // TODO: handle count other than 1
+                            command(view, 1);
+                            view.ensure_cursor_in_view();
+                            self.render();
+                        } else if mode == Mode::Insert {
+                            // Arbitrary characters are intentionally not entries in the keymap.
+                            // Like the original insert mode, every character is inserted
+                            // regardless of modifier bits.
+                            if let KeyEvent {
+                                code: KeyCode::Char(c),
+                                ..
+                            } = event
+                            {
+                                commands::insert_char(view, c);
                                 view.ensure_cursor_in_view();
-
                                 self.render();
-                            }
-                            Mode::Normal => {
-                                // TODO: handle modes and sequences (`gg`)
-                                let keys = vec![event];
-                                if let Some(command) = keymap[&Mode::Normal].get(&keys) {
-                                    // TODO: handle count other than 1
-                                    command(view, 1);
-
-                                    // TODO: simplistic ensure cursor in view for now
-                                    view.ensure_cursor_in_view();
-
-                                    self.render();
-                                }
                             }
                         }
                     }
