@@ -155,8 +155,6 @@ fn request_document_diagnostics_for_language_servers(
         return;
     };
 
-    let cancel = doc.pull_diagnostic_controller.restart();
-
     let mut futures: FuturesUnordered<_> = language_servers
         .iter()
         .filter_map(|x| doc.language_servers().find(|y| &y.id() == x))
@@ -199,6 +197,10 @@ fn request_document_diagnostics_for_language_servers(
     if futures.is_empty() {
         return;
     }
+
+    // An unrelated server refresh must not cancel an existing request when
+    // no matching LSP actually produced work for this document.
+    let cancel = doc.pull_diagnostic_controller.restart();
 
     tokio::spawn(async move {
         let mut retry_language_servers = HashSet::new();
