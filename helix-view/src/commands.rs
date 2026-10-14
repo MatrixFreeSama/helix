@@ -405,11 +405,11 @@ mod navigation_tests {
             goto_mode(&mut v, 1);
             move_file_end(&mut v, 1);
             assert_eq!(v.state.selection().cursor(), expected, "text: {:?}", text);
-            assert_eq!(v.state.mode(), Mode::Normal);
+            assert!(v.state.mode() == Mode::Normal);
             goto_mode(&mut v, 1);
             move_file_start(&mut v, 1);
             assert_eq!(v.state.selection().cursor(), 0);
-            assert_eq!(v.state.mode(), Mode::Normal);
+            assert!(v.state.mode() == Mode::Normal);
         }
     }
 
