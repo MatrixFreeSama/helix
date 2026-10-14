@@ -100,49 +100,6 @@ fn last_lsp_progress_finished(
     progress.end_progress(server_id, token).is_some() && !progress.is_progressing(server_id)
 }
 
-#[cfg(test)]
-mod progress_lifecycle_tests {
-    use super::*;
-
-    #[test]
-    fn refresh_only_after_last_known_token_and_never_for_duplicate_end() {
-        let mut progress = LspProgressMap::new();
-        let server_id = LanguageServerId::default();
-        let first = lsp::ProgressToken::String("first".into());
-        let second = lsp::ProgressToken::String("second".into());
-        let unknown = lsp::ProgressToken::String("unknown".into());
-
-        assert!(!last_lsp_progress_finished(
-            &mut progress,
-            server_id,
-            &unknown
-        ));
-
-        progress.create(server_id, first.clone());
-        progress.create(server_id, second.clone());
-
-        assert!(!last_lsp_progress_finished(
-            &mut progress,
-            server_id,
-            &first
-        ));
-        assert!(!last_lsp_progress_finished(
-            &mut progress,
-            server_id,
-            &first
-        ));
-        assert!(last_lsp_progress_finished(
-            &mut progress,
-            server_id,
-            &second
-        ));
-        assert!(!last_lsp_progress_finished(
-            &mut progress,
-            server_id,
-            &second
-        ));
-    }
-}
 
 impl Application {
     pub fn new(
@@ -1439,4 +1396,111 @@ impl ui::menu::Item for lsp::MessageActionItem {
     fn format(&self, _data: &Self::Data) -> tui::widgets::Row<'_> {
         self.title.as_str().into()
     }
+}
+
+#[cfg(test)]
+mod progress_lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn refresh_only_after_last_known_token_and_never_for_duplicate_end() {
+        let mut progress = LspProgressMap::new();
+        let server_id = LanguageServerId::default();
+        let first = lsp::ProgressToken::String("first".into());
+        let second = lsp::ProgressToken::String("second".into());
+        let unknown = lsp::ProgressToken::String("unknown".into());
+
+        assert!(!last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &unknown
+        ));
+
+        progress.create(server_id, first.clone());
+        progress.create(server_id, second.clone());
+
+        assert!(!last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &first
+        ));
+        assert!(!last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &first
+        ));
+        assert!(last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &second
+        ));
+        assert!(!last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &second
+        ));
+    }
+    #[test]
+    fn dirty_out_of_order_progress_storm() {
+        // Reordered completions, duplicated finishes and ghost completions
+        // should produce exactly one refresh when the last *known* token ends.
+        const COUNT: usize = 2_048;
+        let server_id = LanguageServerId::default();
+        let mut progress = LspProgressMap::new();
+        let tokens: Vec<_> = (0..COUNT)
+            .map(|n| {
+                if n % 2 == 0 {
+                    lsp::ProgressToken::Number(n as i32)
+                } else {
+                    lsp::ProgressToken::String(format!("任务-\u{202e}-{n}"))
+                }
+            })
+            .collect();
+        for token in &tokens {
+            progress.create(server_id, token.clone());
+        }
+
+        let mut refreshes = 0;
+        for n in 0..COUNT {
+            // Each index is visited exactly once in an odd-stride permutation.
+            let index = (n * 1_023) % COUNT;
+            let token = &tokens[index];
+            let unknown = lsp::ProgressToken::String(format!("unknown-{n}"));
+
+            assert!(!last_lsp_progress_finished(&mut progress, server_id, &unknown));
+            if last_lsp_progress_finished(&mut progress, server_id, token) {
+                refreshes += 1;
+            }
+            assert!(!last_lsp_progress_finished(&mut progress, server_id, token));
+        }
+        assert_eq!(refreshes, 1, "only the last real token should refresh");
+        assert!(!progress.is_progressing(server_id));
+    }
+
+    #[test]
+    fn dirty_unknown_progress_reports_never_create_pending_work() {
+        let server_id = LanguageServerId::default();
+        let mut progress = LspProgressMap::new();
+        let unknown = lsp::ProgressToken::String(String::from("\0malformed\n\u{200f}"));
+
+        for _ in 0..1_000 {
+            progress.update(
+                server_id,
+                unknown.clone(),
+                lsp::WorkDoneProgressReport {
+                    message: Some("orphaned report".into()),
+                    percentage: None,
+                    cancellable: None,
+                },
+            );
+            assert!(!last_lsp_progress_finished(&mut progress, server_id, &unknown));
+        }
+        assert!(!progress.is_progressing(server_id));
+
+        // A subsequent legitimate lifecycle must still finish normally.
+        progress.create(server_id, unknown.clone());
+        assert!(last_lsp_progress_finished(&mut progress, server_id, &unknown));
+        assert!(!last_lsp_progress_finished(&mut progress, server_id, &unknown));
+    }
+
 }
