@@ -10,8 +10,8 @@ use helix_view::{
     DocumentId, Editor,
 };
 
-use crate::job;
 use super::document_requests;
+use crate::job;
 
 impl document_requests::DocumentRequest for DocumentLinksEvent {
     fn document_id(self) -> DocumentId {
