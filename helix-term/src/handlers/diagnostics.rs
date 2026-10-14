@@ -51,7 +51,7 @@ pub(super) fn register_hooks(handlers: &Handlers) {
             let document_id = event.doc.id();
             send_blocking(&tx, PullDiagnosticsEvent { document_id });
 
-            let inter_file_dependencies_language_servers = event
+            let inter_file_dependencies_language_servers: HashSet<LanguageServerId> = event
                 .doc
                 .language_servers_with_feature(LanguageServerFeature::PullDiagnostics)
                 .filter(|language_server| {
