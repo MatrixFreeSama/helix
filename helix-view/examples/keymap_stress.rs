@@ -20,6 +20,17 @@ fn new_normal(maps: &keymap::Keymaps, event: KeyEvent) -> bool {
     keymap::lookup(maps, Mode::Normal, event).is_some()
 }
 
+fn original_insert(_maps: &keymap::Keymaps, event: KeyEvent) -> bool {
+    matches!(
+        event.code,
+        KeyCode::Esc | KeyCode::Backspace | KeyCode::Delete | KeyCode::Enter
+    )
+}
+
+fn rebuilt_insert(maps: &keymap::Keymaps, event: KeyEvent) -> bool {
+    keymap::lookup(maps, Mode::Insert, event).is_some()
+}
+
 fn run(
     iterations: usize,
     keys: &[KeyEvent],
@@ -63,27 +74,33 @@ fn main() {
         old_time.as_secs_f64() / new_time.as_secs_f64()
     );
 
-    let mut accepted = 0usize;
-    let controls = [
+    let insert_events = [
         event(KeyCode::Enter, KeyModifiers::SHIFT),
         event(KeyCode::Esc, KeyModifiers::CONTROL),
         event(KeyCode::Backspace, KeyModifiers::SHIFT),
         event(KeyCode::Delete, KeyModifiers::CONTROL),
+        event(KeyCode::Char('a'), KeyModifiers::NONE),
+        event(KeyCode::Char('x'), KeyModifiers::SHIFT),
     ];
-    let start = Instant::now();
-    for i in 0..N {
-        accepted += black_box(
-            keymap::lookup(
-                black_box(&maps),
-                Mode::Insert,
-                black_box(controls[i % controls.len()]),
-            )
-            .is_some(),
-        ) as usize;
-    }
-    assert_eq!(accepted, N);
+    let (old_insert_time, old_insert_matches) =
+        run(N, &insert_events, original_insert, &maps);
+    let (new_insert_time, new_insert_matches) =
+        run(N, &insert_events, rebuilt_insert, &maps);
+    assert_eq!(old_insert_matches, new_insert_matches);
+    assert_eq!(old_insert_matches, 2_000_000);
     println!(
-        "Insert mode: {N} modified control keys matched in {:.3} ms",
-        start.elapsed().as_secs_f64() * 1_000.0
+        "Insert mode: {N} input events, matching checksums = {old_insert_matches}"
+    );
+    println!(
+        "original direct match: {:.3} ms",
+        old_insert_time.as_secs_f64() * 1_000.0
+    );
+    println!(
+        "rebuilt central match: {:.3} ms",
+        new_insert_time.as_secs_f64() * 1_000.0
+    );
+    println!(
+        "insert speedup (old/new): {:.3}x",
+        old_insert_time.as_secs_f64() / new_insert_time.as_secs_f64()
     );
 }
