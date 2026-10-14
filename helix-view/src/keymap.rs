@@ -315,7 +315,7 @@ mod test {
             key(KeyCode::Char('g'), Modifiers::CONTROL),
         )
         .unwrap();
-        assert_eq!(cmd as usize, commands::normal_mode as Command);
+        assert_eq!(cmd as usize, commands::normal_mode as Command as usize);
         for code in [KeyCode::PageUp, KeyCode::PageDown] {
             assert!(lookup(&maps, state::Mode::Normal, key(code, Modifiers::NONE)).is_some());
         }
