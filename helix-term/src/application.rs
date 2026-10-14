@@ -112,15 +112,35 @@ mod progress_lifecycle_tests {
         let second = lsp::ProgressToken::String("second".into());
         let unknown = lsp::ProgressToken::String("unknown".into());
 
-        assert!(!last_lsp_progress_finished(&mut progress, server_id, &unknown));
+        assert!(!last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &unknown
+        ));
 
         progress.create(server_id, first.clone());
         progress.create(server_id, second.clone());
 
-        assert!(!last_lsp_progress_finished(&mut progress, server_id, &first));
-        assert!(!last_lsp_progress_finished(&mut progress, server_id, &first));
-        assert!(last_lsp_progress_finished(&mut progress, server_id, &second));
-        assert!(!last_lsp_progress_finished(&mut progress, server_id, &second));
+        assert!(!last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &first
+        ));
+        assert!(!last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &first
+        ));
+        assert!(last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &second
+        ));
+        assert!(!last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &second
+        ));
     }
 }
 
