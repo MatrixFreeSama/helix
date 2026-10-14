@@ -100,7 +100,6 @@ fn last_lsp_progress_finished(
     progress.end_progress(server_id, token).is_some() && !progress.is_progressing(server_id)
 }
 
-
 impl Application {
     pub fn new(
         args: Args,
@@ -1467,7 +1466,11 @@ mod progress_lifecycle_tests {
             let token = &tokens[index];
             let unknown = lsp::ProgressToken::String(format!("unknown-{n}"));
 
-            assert!(!last_lsp_progress_finished(&mut progress, server_id, &unknown));
+            assert!(!last_lsp_progress_finished(
+                &mut progress,
+                server_id,
+                &unknown
+            ));
             if last_lsp_progress_finished(&mut progress, server_id, token) {
                 refreshes += 1;
             }
@@ -1493,14 +1496,26 @@ mod progress_lifecycle_tests {
                     cancellable: None,
                 },
             );
-            assert!(!last_lsp_progress_finished(&mut progress, server_id, &unknown));
+            assert!(!last_lsp_progress_finished(
+                &mut progress,
+                server_id,
+                &unknown
+            ));
         }
         assert!(!progress.is_progressing(server_id));
 
         // A subsequent legitimate lifecycle must still finish normally.
         progress.create(server_id, unknown.clone());
-        assert!(last_lsp_progress_finished(&mut progress, server_id, &unknown));
-        assert!(!last_lsp_progress_finished(&mut progress, server_id, &unknown));
+        assert!(last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &unknown
+        ));
+        assert!(!last_lsp_progress_finished(
+            &mut progress,
+            server_id,
+            &unknown
+        ));
     }
 
 }
