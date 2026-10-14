@@ -228,10 +228,14 @@ impl Editor {
                 }
 
                 let style: Style = view.theme.get("ui.linenr").into();
-                for (i, line) in (view.first_line..(last_line as u16)).enumerate() {
-                    self.surface
-                        .set_stringn(0, line, format!("{:>5}", i + 1), 5, style);
-                    // lavender
+                for (screen_row, document_line) in (view.first_line as usize..=last_line).enumerate() {
+                    self.surface.set_stringn(
+                        0,
+                        screen_row as u16,
+                        format!("{:>5}", document_line + 1),
+                        5,
+                        style,
+                    );
                 }
 
                 // let lines = state
