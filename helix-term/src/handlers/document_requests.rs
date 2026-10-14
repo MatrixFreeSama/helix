@@ -59,7 +59,9 @@ pub(super) fn request_all<E: DocumentRequest>(editor: &mut Editor) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use helix_view::handlers::lsp::{DocumentColorsEvent, DocumentLinksEvent};
+    use helix_view::handlers::lsp::{
+        DocumentColorsEvent, DocumentLinksEvent, PullDiagnosticsEvent,
+    };
 
     #[test]
     fn mixed_edit_storm_coalesces_each_feature_independently() {
@@ -68,22 +70,33 @@ mod tests {
         let document = DocumentId::default();
         let mut colors = DebouncedDocuments::<DocumentColorsEvent>::new();
         let mut links = DebouncedDocuments::<DocumentLinksEvent>::new();
+        let mut diagnostics = DebouncedDocuments::<PullDiagnosticsEvent>::new();
         let mut color_deadline = None;
         let mut link_deadline = None;
+        let mut diagnostic_deadline = None;
 
         for change in 0..50_000 {
             color_deadline = colors.handle_event(DocumentColorsEvent(document), color_deadline);
             if change % 3 == 0 {
                 link_deadline = links.handle_event(DocumentLinksEvent(document), link_deadline);
             }
+            if change % 2 == 0 {
+                diagnostic_deadline = diagnostics.handle_event(
+                    PullDiagnosticsEvent { document_id: document },
+                    diagnostic_deadline,
+                );
+            }
         }
 
         assert_eq!(colors.docs.len(), 1, "color requests should coalesce");
         assert_eq!(links.docs.len(), 1, "link requests should coalesce");
+        assert_eq!(diagnostics.docs.len(), 1, "diagnostic requests should coalesce");
         assert!(colors.docs.contains(&document));
         assert!(links.docs.contains(&document));
+        assert!(diagnostics.docs.contains(&document));
         assert!(color_deadline.is_some());
         assert!(link_deadline.is_some());
+        assert!(diagnostic_deadline.is_some());
     }
 
     #[test]
