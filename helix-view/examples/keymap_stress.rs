@@ -82,15 +82,11 @@ fn main() {
         event(KeyCode::Char('a'), KeyModifiers::NONE),
         event(KeyCode::Char('x'), KeyModifiers::SHIFT),
     ];
-    let (old_insert_time, old_insert_matches) =
-        run(N, &insert_events, original_insert, &maps);
-    let (new_insert_time, new_insert_matches) =
-        run(N, &insert_events, rebuilt_insert, &maps);
+    let (old_insert_time, old_insert_matches) = run(N, &insert_events, original_insert, &maps);
+    let (new_insert_time, new_insert_matches) = run(N, &insert_events, rebuilt_insert, &maps);
     assert_eq!(old_insert_matches, new_insert_matches);
     assert_eq!(old_insert_matches, 2_000_000);
-    println!(
-        "Insert mode: {N} input events, matching checksums = {old_insert_matches}"
-    );
+    println!("Insert mode: {N} input events, matching checksums = {old_insert_matches}");
     println!(
         "original direct match: {:.3} ms",
         old_insert_time.as_secs_f64() * 1_000.0
