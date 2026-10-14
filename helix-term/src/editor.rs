@@ -93,10 +93,10 @@ impl Editor {
                 // TODO: inefficient, should feed chunks.iter() to tree_sitter.parse_with(|offset, pos|)
                 let source_code = view.state.doc().to_string();
 
-                let last_line = std::cmp::min(
-                    (view.first_line + viewport.height - 1) as usize,
-                    view.state.doc().len_lines() - 1,
-                );
+                let last_line = view
+                    .first_line
+                    .saturating_add(viewport.height as usize - 1)
+                    .min(view.state.doc().len_lines().saturating_sub(1));
 
                 let range = {
                     // calculate viewport byte ranges
@@ -228,10 +228,14 @@ impl Editor {
                 }
 
                 let style: Style = view.theme.get("ui.linenr").into();
-                for (i, line) in (view.first_line..(last_line as u16)).enumerate() {
-                    self.surface
-                        .set_stringn(0, line, format!("{:>5}", i + 1), 5, style);
-                    // lavender
+                for (screen_row, line) in (view.first_line..=last_line).enumerate() {
+                    self.surface.set_stringn(
+                        0,
+                        screen_row as u16,
+                        format!("{:>5}", line + 1),
+                        5,
+                        style,
+                    );
                 }
 
                 // let lines = state
@@ -263,6 +267,7 @@ impl Editor {
                 let mode = match view.state.mode() {
                     Mode::Insert => "INS",
                     Mode::Normal => "NOR",
+                    Mode::Goto => "GOTO",
                 };
                 self.surface.set_style(
                     Rect::new(0, self.size.1 - 1, self.size.0, 1),
@@ -286,7 +291,7 @@ impl Editor {
                 // set cursor shape
                 match view.state.mode() {
                     Mode::Insert => write!(stdout, "\x1B[6 q"),
-                    Mode::Normal => write!(stdout, "\x1B[2 q"),
+                    Mode::Normal | Mode::Goto => write!(stdout, "\x1B[2 q"),
                 };
 
                 // The position is already viewport-relative: do not subtract
@@ -324,7 +329,7 @@ impl Editor {
                     self.surface = Surface::empty(area);
                     self.cache = Surface::empty(area);
 
-                    // TODO: simplistic ensure cursor in view for now
+                    // Reconcile cursor and viewport after resize.
                     if let Some(view) = &mut self.view {
                         view.size = self.size;
                         view.ensure_cursor_in_view()

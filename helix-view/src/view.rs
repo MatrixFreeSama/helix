@@ -23,7 +23,7 @@ pub fn display_grapheme_width(grapheme: &str, col: usize) -> usize {
 
 pub struct View {
     pub state: State,
-    pub first_line: u16,
+    pub first_line: usize,
     pub size: (u16, u16),
     pub theme: Theme, // TODO: share one instance
 }
@@ -43,20 +43,36 @@ impl View {
         Ok(view)
     }
 
-    pub fn ensure_cursor_in_view(&mut self) {
-        let cursor = self.state.selection().cursor();
-        let line = self.state.doc().char_to_line(cursor) as u16;
-        let rows = self.size.1.saturating_sub(1).max(1);
-        let document_end = self.first_line.saturating_add(rows - 1);
-        let padding = 5u16.min(rows - 1);
+    /// Text rows, excluding status bar. One logical row is retained when
+    /// terminal height is zero so navigation arithmetic stays well-defined.
+    pub fn text_rows(&self) -> usize {
+        (self.size.1 as usize).saturating_sub(1).max(1)
+    }
 
-        // TODO: side scroll
-        if line > document_end.saturating_sub(padding) {
-            self.first_line = self
-                .first_line
-                .saturating_add(line - document_end.saturating_sub(padding));
+    pub fn cursor_padding(&self) -> usize {
+        5usize.min((self.text_rows() - 1) / 2)
+    }
+
+    pub fn ensure_cursor_in_view(&mut self) {
+        let line = self
+            .state
+            .doc()
+            .char_to_line(self.state.selection().cursor());
+        let visible = self.text_rows();
+        let max_first = self.state.doc().len_lines().saturating_sub(visible);
+        self.first_line = self.first_line.min(max_first);
+
+        // Padding can never push the viewport beyond either document edge.
+        let padding = self.cursor_padding();
+        let last_comfortable = self.first_line.saturating_add(visible - 1 - padding);
+        if line > last_comfortable {
+            self.first_line = line.saturating_sub(visible - 1 - padding).min(max_first);
         } else if line < self.first_line.saturating_add(padding) {
-            self.first_line = line.saturating_sub(padding);
+            self.first_line = line.saturating_sub(padding).min(max_first);
+        }
+        // Keep the cursor on-screen even when a tiny viewport has no padding.
+        if line >= self.first_line.saturating_add(visible) {
+            self.first_line = line.saturating_sub(visible - 1).min(max_first);
         }
     }
 
@@ -68,7 +84,7 @@ impl View {
             return None;
         }
         let row = text.char_to_line(pos);
-        let first = self.first_line as usize;
+        let first = self.first_line;
         if row < first || row >= first + viewport_height as usize {
             return None;
         }

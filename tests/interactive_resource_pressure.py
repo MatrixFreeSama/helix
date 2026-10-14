@@ -149,6 +149,25 @@ def stop_workers(workers):
             worker.wait(timeout=2)
 
 
+def navigation_phase(name, fd, proc):
+    # One real PTY event at a time. Both cursor movement and state transitions
+    # must complete while the editor is alive, without freezing or panicking.
+    # Starts in Normal mode and ends in Insert mode.
+    sequence = [
+        b"g", b"g",     # gg: first substantive line
+        b"g", b"e",     # ge: last substantive line
+        b"\x1b[5~",   # PageUp
+        b"\x1b[6~",   # PageDown
+        b"\x15",      # Ctrl+U
+        b"\x04",      # Ctrl+D
+        b"g", b"x",     # unknown Goto continuation must not trap modal state
+        b"g", b"g",
+        b"i",          # return to Insert for the next input-stress phase
+    ]
+    latencies = [press(fd, proc, code) for code in sequence]
+    record(name, latencies)
+
+
 def input_phase(name, fd, proc, count=SAMPLES_PER_PHASE):
     latencies = []
     for i in range(count):
@@ -208,7 +227,7 @@ def main(binary):
                 boot_ms, boot_output = receive(master, proc, timeout=15.0)
                 RESULTS["boot_ms"] = round(boot_ms, 3)
                 RESULTS["boot_bytes"] = len(boot_output)
-                press(master, proc, b"i")  # Enter insert mode before any pressure.
+                navigation_phase("goto_and_page_baseline", master, proc)
                 input_phase("baseline", master, proc)
                 set_affinity_all(proc.pid, {cpus[0]})
                 RESULTS["diagnostics"].append({
@@ -242,6 +261,8 @@ def main(binary):
                 input_phase("cpu_memory_io_contention", master, proc)
                 set_affinity_all(proc.pid, {cpus[0]})
                 input_phase("cpu_withdrawal_under_contention", master, proc)
+                press(master, proc, b"\x1b")  # Leave insert mode for Goto under pressure.
+                navigation_phase("goto_and_page_under_contention", master, proc)
                 set_affinity_all(proc.pid, set(cpus))
                 stop_workers(workers)
                 workers.clear()
