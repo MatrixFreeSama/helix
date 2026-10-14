@@ -105,6 +105,27 @@ mod tests {
     }
 
     #[test]
+    fn new_edits_after_a_flushed_batch_are_not_lost() {
+        let document = DocumentId::default();
+        let mut handler = DebouncedDocuments::<DocumentColorsEvent>::new();
+
+        for _ in 0..10_000 {
+            handler.handle_event(DocumentColorsEvent(document), None);
+        }
+
+        // finish_debounce drains a batch by taking this set. Incoming edits
+        // must begin a fresh batch without modifying the dispatched one.
+        let dispatched = std::mem::take(&mut handler.docs);
+        assert_eq!(dispatched.len(), 1);
+        assert!(handler.docs.is_empty());
+
+        let next_deadline = handler.handle_event(DocumentColorsEvent(document), None);
+        assert!(next_deadline.is_some());
+        assert_eq!(handler.docs.len(), 1);
+        assert_eq!(dispatched.len(), 1);
+    }
+
+    #[test]
     fn different_document_request_types_do_not_share_pending_state() {
         let document = DocumentId::default();
         let mut colors = DebouncedDocuments::<DocumentColorsEvent>::new();
