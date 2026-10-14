@@ -90,6 +90,40 @@ fn setup_integration_logging() {
     crate::logging::init_stdout(level);
 }
 
+/// True only once, when the last *known* progress token completes.
+/// Duplicate/unknown end messages must not cause redundant LSP refreshes.
+fn last_lsp_progress_finished(
+    progress: &mut LspProgressMap,
+    server_id: LanguageServerId,
+    token: &lsp::ProgressToken,
+) -> bool {
+    progress.end_progress(server_id, token).is_some() && !progress.is_progressing(server_id)
+}
+
+#[cfg(test)]
+mod progress_lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn refresh_only_after_last_known_token_and_never_for_duplicate_end() {
+        let mut progress = LspProgressMap::new();
+        let server_id = LanguageServerId::default();
+        let first = lsp::ProgressToken::String("first".into());
+        let second = lsp::ProgressToken::String("second".into());
+        let unknown = lsp::ProgressToken::String("unknown".into());
+
+        assert!(!last_lsp_progress_finished(&mut progress, server_id, &unknown));
+
+        progress.create(server_id, first.clone());
+        progress.create(server_id, second.clone());
+
+        assert!(!last_lsp_progress_finished(&mut progress, server_id, &first));
+        assert!(!last_lsp_progress_finished(&mut progress, server_id, &first));
+        assert!(last_lsp_progress_finished(&mut progress, server_id, &second));
+        assert!(!last_lsp_progress_finished(&mut progress, server_id, &second));
+    }
+}
+
 impl Application {
     pub fn new(
         args: Args,
@@ -774,6 +808,23 @@ impl Application {
         }
     }
 
+    /// Finalize one LSP work-done token. Only the transition from an active
+    /// token to no remaining tokens triggers a diagnostics refresh.
+    fn finish_lsp_progress(
+        progress: &mut LspProgressMap,
+        editor_view: &mut ui::EditorView,
+        editor: &mut Editor,
+        server_id: LanguageServerId,
+        token: &lsp::ProgressToken,
+    ) {
+        if last_lsp_progress_finished(progress, server_id, token) {
+            editor_view.spinners_mut().get_or_create(server_id).stop();
+            handlers::diagnostics::request_all_document_diagnostics_for_language_server(
+                editor, server_id,
+            );
+        }
+    }
+
     pub async fn handle_language_server_message(
         &mut self,
         call: helix_lsp::Call,
@@ -885,14 +936,13 @@ impl Application {
                                 if message.is_some() {
                                     (None, message, &None)
                                 } else {
-                                    self.lsp_progress.end_progress(server_id, &token);
-                                    if !self.lsp_progress.is_progressing(server_id) {
-                                        editor_view.spinners_mut().get_or_create(server_id).stop();
-                                        handlers::diagnostics::request_all_document_diagnostics_for_language_server(
-                                            &mut self.editor,
-                                            server_id,
-                                        );
-                                    }
+                                    Self::finish_lsp_progress(
+                                        &mut self.lsp_progress,
+                                        editor_view,
+                                        &mut self.editor,
+                                        server_id,
+                                        &token,
+                                    );
                                     self.editor.clear_status();
 
                                     // we want to render to clear any leftover spinners or messages
@@ -933,14 +983,13 @@ impl Application {
                                     .update(server_id, token.clone(), report_status);
                             }
                             lsp::WorkDoneProgress::End(_) => {
-                                self.lsp_progress.end_progress(server_id, &token);
-                                if !self.lsp_progress.is_progressing(server_id) {
-                                    editor_view.spinners_mut().get_or_create(server_id).stop();
-                                    handlers::diagnostics::request_all_document_diagnostics_for_language_server(
-                                        &mut self.editor,
-                                        server_id,
-                                    );
-                                };
+                                Self::finish_lsp_progress(
+                                    &mut self.lsp_progress,
+                                    editor_view,
+                                    &mut self.editor,
+                                    server_id,
+                                    &token,
+                                );
                             }
                         }
                     }
