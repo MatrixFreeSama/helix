@@ -55,3 +55,67 @@ pub(super) fn request_all<E: DocumentRequest>(editor: &mut Editor) {
         E::request(editor, doc_id);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use helix_view::handlers::lsp::{DocumentColorsEvent, DocumentLinksEvent};
+
+    #[test]
+    fn mixed_edit_storm_coalesces_each_feature_independently() {
+        // A heavily edited document can generate thousands of both events before
+        // the debounce fires. Both features must retain their own pending work.
+        let document = DocumentId::default();
+        let mut colors = DebouncedDocuments::<DocumentColorsEvent>::new();
+        let mut links = DebouncedDocuments::<DocumentLinksEvent>::new();
+        let mut color_deadline = None;
+        let mut link_deadline = None;
+
+        for change in 0..50_000 {
+            color_deadline = colors.handle_event(DocumentColorsEvent(document), color_deadline);
+            if change % 3 == 0 {
+                link_deadline = links.handle_event(DocumentLinksEvent(document), link_deadline);
+            }
+        }
+
+        assert_eq!(colors.docs.len(), 1, "color requests should coalesce");
+        assert_eq!(links.docs.len(), 1, "link requests should coalesce");
+        assert!(colors.docs.contains(&document));
+        assert!(links.docs.contains(&document));
+        assert!(color_deadline.is_some());
+        assert!(link_deadline.is_some());
+    }
+
+    #[test]
+    fn repeated_changes_reschedule_the_document_deadline() {
+        let document = DocumentId::default();
+        let mut handler = DebouncedDocuments::<DocumentColorsEvent>::new();
+
+        let before = Instant::now();
+        let first = handler
+            .handle_event(DocumentColorsEvent(document), None)
+            .expect("document changes must schedule a refresh");
+        let second = handler
+            .handle_event(DocumentColorsEvent(document), Some(first))
+            .expect("another change must keep the refresh scheduled");
+
+        assert!(first >= before + DOCUMENT_CHANGE_DEBOUNCE);
+        assert!(second >= first, "new changes must not shorten the deadline");
+        assert_eq!(handler.docs.len(), 1);
+    }
+
+    #[test]
+    fn different_document_request_types_do_not_share_pending_state() {
+        let document = DocumentId::default();
+        let mut colors = DebouncedDocuments::<DocumentColorsEvent>::new();
+        let mut links = DebouncedDocuments::<DocumentLinksEvent>::new();
+
+        colors.handle_event(DocumentColorsEvent(document), None);
+        assert_eq!(colors.docs.len(), 1);
+        assert!(links.docs.is_empty());
+
+        links.handle_event(DocumentLinksEvent(document), None);
+        assert_eq!(links.docs.len(), 1);
+        assert_eq!(colors.docs.len(), 1);
+    }
+}
