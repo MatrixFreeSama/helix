@@ -82,7 +82,9 @@ mod tests {
             }
             if change % 2 == 0 {
                 diagnostic_deadline = diagnostics.handle_event(
-                    PullDiagnosticsEvent { document_id: document },
+                    PullDiagnosticsEvent {
+                        document_id: document,
+                    },
                     diagnostic_deadline,
                 );
             }
@@ -90,7 +92,11 @@ mod tests {
 
         assert_eq!(colors.docs.len(), 1, "color requests should coalesce");
         assert_eq!(links.docs.len(), 1, "link requests should coalesce");
-        assert_eq!(diagnostics.docs.len(), 1, "diagnostic requests should coalesce");
+        assert_eq!(
+            diagnostics.docs.len(),
+            1,
+            "diagnostic requests should coalesce"
+        );
         assert!(colors.docs.contains(&document));
         assert!(links.docs.contains(&document));
         assert!(diagnostics.docs.contains(&document));
