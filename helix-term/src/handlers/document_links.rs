@@ -135,13 +135,19 @@ pub(super) fn register_hooks(handlers: &Handlers) {
     });
 
     register_hook!(move |event: &mut LanguageServerExited<'_>| {
-        for doc in event.editor.documents_mut() {
-            if doc.supports_language_server(event.server_id) {
+        let affected_documents: Vec<_> = event
+            .editor
+            .documents_mut()
+            .filter(|doc| doc.supports_language_server(event.server_id))
+            .map(|doc| {
                 doc.document_links.clear();
-            }
-        }
+                doc.id()
+            })
+            .collect();
 
-        document_requests::request_all::<DocumentLinksEvent>(event.editor);
+        for doc_id in affected_documents {
+            request_document_links(event.editor, doc_id);
+        }
 
         Ok(())
     });
