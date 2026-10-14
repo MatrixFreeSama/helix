@@ -228,7 +228,8 @@ impl Editor {
                 }
 
                 let style: Style = view.theme.get("ui.linenr").into();
-                for (screen_row, document_line) in (view.first_line as usize..=last_line).enumerate() {
+                let visible_lines = view.first_line as usize..=last_line;
+                for (screen_row, document_line) in visible_lines.enumerate() {
                     self.surface.set_stringn(
                         0,
                         screen_row as u16,
