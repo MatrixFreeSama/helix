@@ -1,6 +1,9 @@
 name: Build and key-dispatch stress
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches: [master]
 
 jobs:
   integration-and-stress:
@@ -23,3 +26,14 @@ jobs:
         run: cargo test --workspace --all-features -- --nocapture
       - name: 3M-event release performance comparison
         run: cargo run --release -p helix-view --features term --example keymap_stress
+      - name: Build actual Helix terminal binary
+        run: cargo build --release -p helix-term --bin hx
+      - name: Live CPU withdrawal and external resource-pressure PTY test
+        run: python3 tests/interactive_resource_pressure.py target/release/hx
+      - name: Keep dirty-business measurements even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dirty-business-results-${{ github.run_id }}
+          path: dirty-business-results.json
+          if-no-files-found: warn

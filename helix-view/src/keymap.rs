@@ -102,6 +102,7 @@ pub fn lookup(keymaps: &Keymaps, mode: state::Mode, event: Key) -> Option<Comman
             KeyCode::Backspace => Some(commands::delete_char_backward as Command),
             KeyCode::Delete => Some(commands::delete_char_forward as Command),
             KeyCode::Enter => Some(commands::insert_newline as Command),
+            KeyCode::Tab => Some(commands::insert_tab as Command),
             _ => None,
         },
         state::Mode::Normal => keymaps
@@ -226,6 +227,7 @@ mod test {
             ),
             (KeyCode::Delete, commands::delete_char_forward as Command),
             (KeyCode::Enter, commands::insert_newline as Command),
+            (KeyCode::Tab, commands::insert_tab as Command),
         ];
         for (code, expected) in controls.iter().copied() {
             for modifiers in [Modifiers::NONE, Modifiers::SHIFT, Modifiers::CONTROL]
