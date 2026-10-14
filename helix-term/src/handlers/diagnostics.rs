@@ -332,7 +332,10 @@ mod tests {
         assert!(handler.language_servers.is_empty());
 
         let deadline = Instant::now() + Duration::from_secs(1);
-        assert_eq!(handler.handle_event(event(), Some(deadline)), Some(deadline));
+        assert_eq!(
+            handler.handle_event(event(), Some(deadline)),
+            Some(deadline)
+        );
         assert!(handler.language_servers.is_empty());
     }
 }
