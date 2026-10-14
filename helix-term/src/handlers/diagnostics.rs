@@ -72,12 +72,14 @@ pub(super) fn register_hooks(handlers: &Handlers) {
                 .map(|language_server| language_server.id())
                 .collect();
 
-            send_blocking(
-                &tx_all_documents,
-                PullAllDocumentsDiagnosticsEvent {
-                    language_servers: inter_file_dependencies_language_servers,
-                },
-            );
+            if !inter_file_dependencies_language_servers.is_empty() {
+                send_blocking(
+                    &tx_all_documents,
+                    PullAllDocumentsDiagnosticsEvent {
+                        language_servers: inter_file_dependencies_language_servers,
+                    },
+                );
+            }
         }
         Ok(())
     });
@@ -89,40 +91,18 @@ pub(super) fn register_hooks(handlers: &Handlers) {
     });
 
     register_hook!(move |event: &mut LanguageServerInitialized<'_>| {
-        let doc_ids: Vec<_> = event.editor.documents.keys().copied().collect();
-
-        for doc_id in doc_ids {
-            request_document_diagnostics(event.editor, doc_id);
-        }
-
+        super::document_requests::request_all::<PullDiagnosticsEvent>(event.editor);
         Ok(())
     });
 }
 
-#[derive(Debug, Default)]
-pub(super) struct PullDiagnosticsHandler {
-    document_ids: HashSet<DocumentId>,
-}
-
-impl helix_event::AsyncHook for PullDiagnosticsHandler {
-    type Event = PullDiagnosticsEvent;
-
-    fn handle_event(
-        &mut self,
-        event: Self::Event,
-        _timeout: Option<tokio::time::Instant>,
-    ) -> Option<tokio::time::Instant> {
-        self.document_ids.insert(event.document_id);
-        Some(Instant::now() + Duration::from_millis(250))
+impl super::document_requests::DocumentRequest for PullDiagnosticsEvent {
+    fn document_id(self) -> DocumentId {
+        self.document_id
     }
 
-    fn finish_debounce(&mut self) {
-        let document_ids = mem::take(&mut self.document_ids);
-        job::dispatch_blocking(move |editor, _| {
-            for document_id in document_ids {
-                request_document_diagnostics(editor, document_id);
-            }
-        })
+    fn request(editor: &mut Editor, doc_id: DocumentId) {
+        request_document_diagnostics(editor, doc_id);
     }
 }
 
@@ -137,9 +117,12 @@ impl helix_event::AsyncHook for PullAllDocumentsDiagnosticHandler {
     fn handle_event(
         &mut self,
         event: Self::Event,
-        _timeout: Option<tokio::time::Instant>,
+        timeout: Option<tokio::time::Instant>,
     ) -> Option<tokio::time::Instant> {
-        self.language_servers.extend(&event.language_servers);
+        if event.language_servers.is_empty() {
+            return timeout;
+        }
+        self.language_servers.extend(event.language_servers);
         Some(Instant::now() + Duration::from_secs(1))
     }
 
@@ -152,7 +135,7 @@ impl helix_event::AsyncHook for PullAllDocumentsDiagnosticHandler {
                 request_document_diagnostics_for_language_servers(
                     editor,
                     document,
-                    language_servers.clone(),
+                    &language_servers,
                 );
             }
         })
@@ -162,8 +145,12 @@ impl helix_event::AsyncHook for PullAllDocumentsDiagnosticHandler {
 fn request_document_diagnostics_for_language_servers(
     editor: &mut Editor,
     doc_id: DocumentId,
-    language_servers: HashSet<LanguageServerId>,
+    language_servers: &HashSet<LanguageServerId>,
 ) {
+    if language_servers.is_empty() {
+        return;
+    }
+
     let Some(doc) = editor.document_mut(doc_id) else {
         return;
     };
@@ -250,7 +237,7 @@ fn request_document_diagnostics_for_language_servers(
                 request_document_diagnostics_for_language_servers(
                     editor,
                     doc_id,
-                    retry_language_servers,
+                    &retry_language_servers,
                 );
             })
             .await;
@@ -283,7 +270,7 @@ pub fn request_document_diagnostics(editor: &mut Editor, doc_id: DocumentId) {
         .map(|language_servers| language_servers.id())
         .collect();
 
-    request_document_diagnostics_for_language_servers(editor, doc_id, language_servers);
+    request_document_diagnostics_for_language_servers(editor, doc_id, &language_servers);
 }
 
 fn handle_pull_diagnostics_response(
@@ -327,4 +314,25 @@ fn handle_pull_diagnostics_response(
         }
         lsp::DocumentDiagnosticReportResult::Partial(_) => {}
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use helix_event::AsyncHook;
+
+    #[test]
+    fn empty_interfile_refresh_does_not_schedule_or_delay_work() {
+        let mut handler = PullAllDocumentsDiagnosticHandler::default();
+        let event = || PullAllDocumentsDiagnosticsEvent {
+            language_servers: HashSet::new(),
+        };
+
+        assert!(handler.handle_event(event(), None).is_none());
+        assert!(handler.language_servers.is_empty());
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        assert_eq!(handler.handle_event(event(), Some(deadline)), Some(deadline));
+        assert!(handler.language_servers.is_empty());
+    }
 }
