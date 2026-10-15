@@ -354,7 +354,11 @@ impl Editor {
                 if let Some(prompt) = &self.prompt {
                     let (_, x) = prompt.visible_input(self.size.0 as usize);
                     if x < self.size.0 as usize {
-                        execute!(stdout, cursor::Show, cursor::MoveTo(x as u16, self.size.1 - 1));
+                        execute!(
+                            stdout,
+                            cursor::Show,
+                            cursor::MoveTo(x as u16, self.size.1 - 1)
+                        );
                     } else {
                         execute!(stdout, cursor::Hide);
                     }
