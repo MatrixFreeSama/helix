@@ -18,7 +18,7 @@ results = []
 
 def scenario(binary, root, name):
     target = root / (name + ".txt")
-    existing = name in ("dirty_guard", "overwrite_save")
+    existing = name in ("dirty_guard", "overwrite_save", "failed_save_keeps_file")
     if existing:
         target.write_text("original\n", encoding="utf-8")
     master, slave = pty.openpty()
@@ -36,7 +36,18 @@ def scenario(binary, root, name):
             receive(master, process, timeout=15)
             for raw in (b"i", b"Z", b"\x1b"):
                 press(master, process, raw)
-            if name == "dirty_guard":
+            if name == "failed_save_keeps_file":
+                press(master, process, b":")
+                for c in "w " + str(root):
+                    press(master, process, c.encode("utf-8"))
+                press(master, process, b"\r")
+                assert process.poll() is None, "failed save terminated the process"
+                assert target.read_text(encoding="utf-8") == "original\n"
+                for raw in (b"\x1b", b":", b"q", b"!"):
+                    press(master, process, raw)
+                os.write(master, b"\r")
+                expected = "original\n"
+            elif name == "dirty_guard":
                 for raw in (b":", b"q", b"\r"):
                     press(master, process, raw)
                 assert process.poll() is None, "dirty :q terminated the process"
@@ -77,7 +88,7 @@ def scenario(binary, root, name):
 def main(binary):
     with tempfile.TemporaryDirectory(prefix="hx-persist-") as tmp:
         root = pathlib.Path(tmp)
-        for case in ("dirty_guard", "overwrite_save", "new_named_file", "unnamed_save_as"):
+        for case in ("dirty_guard", "overwrite_save", "new_named_file", "unnamed_save_as", "failed_save_keeps_file"):
             scenario(binary, root, case)
 
 
