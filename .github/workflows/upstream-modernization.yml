@@ -62,6 +62,15 @@ jobs:
       - name: Execute upstream core and workspace regression tests
         working-directory: modern
         run: cargo +1.90.0 test --workspace --locked
+      - uses: actions/checkout@v4
+        with:
+          path: industrial
+          persist-credentials: false
+      - name: Build the real modern terminal
+        working-directory: modern
+        run: cargo +1.90.0 build --release --locked -p helix-term --bin hx
+      - name: Apply identical real-file persistence contract to modern Helix
+        run: python3 industrial/tests/persistence_pty.py modern/target/release/hx
 
   stage-modern:
     if: github.event_name != 'pull_request'
