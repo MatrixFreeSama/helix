@@ -93,187 +93,192 @@ impl Editor {
                     self.size.0.saturating_sub(offset),
                     self.size.1.saturating_sub(1),
                 ); // - 1 for statusline
-                if viewport.height == 0 || viewport.width == 0 {
+                // A zero-sized terminal cannot draw cells; all nonzero
+                // dimensions still render the common status/prompt row.
+                if self.size.0 == 0 || self.size.1 == 0 {
                     return;
                 }
 
-                // Source is immutable between document transactions. Reuse the
-                // same bytes for navigation, resize, selection and prompt UI.
-                if self.render_revision != Some(view.state.revision()) {
-                    self.render_bytes.clear();
-                    for chunk in view.state.doc().chunks() {
-                        self.render_bytes.extend_from_slice(chunk.as_bytes());
-                    }
-                    self.render_revision = Some(view.state.revision());
-                }
-
-                let last_line = view
-                    .first_line
-                    .saturating_add(viewport.height as usize - 1)
-                    .min(view.state.doc().len_lines().saturating_sub(1));
-
-                let range = {
-                    // calculate viewport byte ranges
-                    let start = view.state.doc().line_to_byte(view.first_line.into());
-                    let end = view.state.doc().line_to_byte(last_line)
-                        + view.state.doc().line(last_line).len_bytes();
-
-                    start..end
-                };
-
-                // TODO: range doesn't actually restrict source, just highlight range
-
-                // TODO: cache highlight results
-                // TODO: only recalculate when state.doc is actually modified
-                let highlights: Vec<_> = match view.state.syntax.as_mut() {
-                    Some(syntax) => {
-                        syntax
-                            .highlight_iter(&self.render_bytes, Some(range), None, |_| None)
-                            .unwrap()
-                            .collect() // TODO: we collect here to avoid double borrow, fix later
-                    }
-                    None => vec![Ok(HighlightEvent::Source {
-                        start: range.start,
-                        end: range.end,
-                    })],
-                };
-
-                let mut spans = Vec::new();
-
-                let mut visual_x = 0;
-                let mut line = 0u16;
-
-                let visible_selections: Vec<Range> = view
-                    .state
-                    .selection()
-                    .ranges()
-                    .iter()
-                    // TODO: limit selection to one in viewport
-                    .filter(|range| !range.is_empty()) // && range.overlaps(&Range::new(start, end + 1))
-                    .copied()
-                    .collect();
-
-                'outer: for event in highlights {
-                    match event.unwrap() {
-                        HighlightEvent::HighlightStart(span) => {
-                            spans.push(span);
+                if viewport.width > 0 && viewport.height > 0 {
+                    // Source is immutable between document transactions. Reuse the
+                    // same bytes for navigation, resize, selection and prompt UI.
+                    if self.render_revision != Some(view.state.revision()) {
+                        self.render_bytes.clear();
+                        for chunk in view.state.doc().chunks() {
+                            self.render_bytes.extend_from_slice(chunk.as_bytes());
                         }
-                        HighlightEvent::HighlightEnd => {
-                            spans.pop();
+                        self.render_revision = Some(view.state.revision());
+                    }
+
+                    let last_line = view
+                        .first_line
+                        .saturating_add(viewport.height as usize - 1)
+                        .min(view.state.doc().len_lines().saturating_sub(1));
+
+                    let range = {
+                        // calculate viewport byte ranges
+                        let start = view.state.doc().line_to_byte(view.first_line.into());
+                        let end = view.state.doc().line_to_byte(last_line)
+                            + view.state.doc().line(last_line).len_bytes();
+
+                        start..end
+                    };
+
+                    // TODO: range doesn't actually restrict source, just highlight range
+
+                    // TODO: cache highlight results
+                    // TODO: only recalculate when state.doc is actually modified
+                    let highlights: Vec<_> = match view.state.syntax.as_mut() {
+                        Some(syntax) => {
+                            syntax
+                                .highlight_iter(&self.render_bytes, Some(range), None, |_| None)
+                                .unwrap()
+                                .collect() // TODO: we collect here to avoid double borrow, fix later
                         }
-                        HighlightEvent::Source { start, end } => {
-                            // TODO: filter out spans out of viewport for now..
+                        None => vec![Ok(HighlightEvent::Source {
+                            start: range.start,
+                            end: range.end,
+                        })],
+                    };
 
-                            let start = view.state.doc().byte_to_char(start);
-                            let end = view.state.doc().byte_to_char(end);
+                    let mut spans = Vec::new();
 
-                            let text = view.state.doc().slice(start..end);
+                    let mut visual_x = 0;
+                    let mut line = 0u16;
 
-                            use helix_core::graphemes::RopeGraphemes;
+                    let visible_selections: Vec<Range> = view
+                        .state
+                        .selection()
+                        .ranges()
+                        .iter()
+                        // TODO: limit selection to one in viewport
+                        .filter(|range| !range.is_empty()) // && range.overlaps(&Range::new(start, end + 1))
+                        .copied()
+                        .collect();
 
-                            let style = match spans.first() {
-                                Some(span) => {
-                                    view.theme.get(view.theme.scopes()[span.0].as_str()).into()
-                                }
-                                None => Style::default().fg(Color::Rgb(164, 160, 232)), // lavender
-                            };
+                    'outer: for event in highlights {
+                        match event.unwrap() {
+                            HighlightEvent::HighlightStart(span) => {
+                                spans.push(span);
+                            }
+                            HighlightEvent::HighlightEnd => {
+                                spans.pop();
+                            }
+                            HighlightEvent::Source { start, end } => {
+                                // TODO: filter out spans out of viewport for now..
 
-                            // TODO: we could render the text to a surface, then cache that, that
-                            // way if only the selection/cursor changes we can copy from cache
-                            // and paint the new cursor.
+                                let start = view.state.doc().byte_to_char(start);
+                                let end = view.state.doc().byte_to_char(end);
 
-                            let mut char_index = start;
+                                let text = view.state.doc().slice(start..end);
 
-                            // iterate over range char by char
-                            for grapheme in RopeGraphemes::new(&text) {
-                                let grapheme: Cow<str> = Cow::from(grapheme);
+                                use helix_core::graphemes::RopeGraphemes;
 
-                                if grapheme == "\n" {
-                                    visual_x = 0;
-                                    line += 1;
-
-                                    // TODO: with proper iter this shouldn't be necessary
-                                    if line >= viewport.height {
-                                        break 'outer;
+                                let style = match spans.first() {
+                                    Some(span) => {
+                                        view.theme.get(view.theme.scopes()[span.0].as_str()).into()
                                     }
-                                } else {
-                                    let width =
-                                        display_grapheme_width(&grapheme, visual_x as usize) as u16;
+                                    None => Style::default().fg(Color::Rgb(164, 160, 232)), // lavender
+                                };
 
-                                    let style = if visible_selections
-                                        .iter()
-                                        .any(|range| range.contains(char_index))
-                                    {
-                                        // cedar
-                                        style.clone().bg(Color::Rgb(128, 47, 0))
-                                    } else {
-                                        style
-                                    };
+                                // TODO: we could render the text to a surface, then cache that, that
+                                // way if only the selection/cursor changes we can copy from cache
+                                // and paint the new cursor.
 
-                                    // The viewport is a hard screen boundary. Never hand
-                                    // offscreen x coordinates to tui::Buffer (it may panic).
-                                    // A partially visible tab is blank-filled; a wide
-                                    // grapheme is painted only if all its cells fit.
-                                    if visual_x < viewport.width {
-                                        let remaining = viewport.width - visual_x;
-                                        let screen_x = offset + visual_x;
-                                        if grapheme == "\t" {
-                                            self.surface.set_stringn(
-                                                screen_x,
-                                                line,
-                                                "    ",
-                                                remaining.min(width) as usize,
-                                                style,
-                                            );
-                                        } else if width <= remaining {
-                                            self.surface
-                                                .set_string(screen_x, line, grapheme, style);
+                                let mut char_index = start;
+
+                                // iterate over range char by char
+                                for grapheme in RopeGraphemes::new(&text) {
+                                    let grapheme: Cow<str> = Cow::from(grapheme);
+
+                                    if grapheme == "\n" {
+                                        visual_x = 0;
+                                        line += 1;
+
+                                        // TODO: with proper iter this shouldn't be necessary
+                                        if line >= viewport.height {
+                                            break 'outer;
                                         }
-                                    }
-                                    visual_x = visual_x.saturating_add(width);
-                                }
+                                    } else {
+                                        let width =
+                                            display_grapheme_width(&grapheme, visual_x as usize) as u16;
 
-                                char_index += grapheme.chars().count();
+                                        let style = if visible_selections
+                                            .iter()
+                                            .any(|range| range.contains(char_index))
+                                        {
+                                            // cedar
+                                            style.clone().bg(Color::Rgb(128, 47, 0))
+                                        } else {
+                                            style
+                                        };
+
+                                        // The viewport is a hard screen boundary. Never hand
+                                        // offscreen x coordinates to tui::Buffer (it may panic).
+                                        // A partially visible tab is blank-filled; a wide
+                                        // grapheme is painted only if all its cells fit.
+                                        if visual_x < viewport.width {
+                                            let remaining = viewport.width - visual_x;
+                                            let screen_x = offset + visual_x;
+                                            if grapheme == "\t" {
+                                                self.surface.set_stringn(
+                                                    screen_x,
+                                                    line,
+                                                    "    ",
+                                                    remaining.min(width) as usize,
+                                                    style,
+                                                );
+                                            } else if width <= remaining {
+                                                self.surface
+                                                    .set_string(screen_x, line, grapheme, style);
+                                            }
+                                        }
+                                        visual_x = visual_x.saturating_add(width);
+                                    }
+
+                                    char_index += grapheme.chars().count();
+                                }
                             }
                         }
                     }
+
+                    let style: Style = view.theme.get("ui.linenr").into();
+                    for (screen_row, line) in (view.first_line..=last_line).enumerate() {
+                        self.surface.set_stringn(
+                            0,
+                            screen_row as u16,
+                            format!("{:>5}", line + 1),
+                            5,
+                            style,
+                        );
+                    }
+
+                    // let lines = state
+                    //     .doc
+                    //     .lines_at(self.first_line as usize)
+                    //     .take(self.size.1 as usize)
+                    //     .map(|x| x.as_str().unwrap());
+
+                    // // iterate over selections and render them
+                    // let select = Style::default().bg(tui::style::Color::LightBlue);
+                    // let text = state.doc.slice(..);
+                    // for range in state.selection.ranges() {
+                    //     // get terminal coords for x,y for each range pos
+                    //     // TODO: this won't work with multiline
+                    //     let (y1, x1) = coords_at_pos(&text, range.from());
+                    //     let (y2, x2) = coords_at_pos(&text, range.to());
+                    //     let area = Rect::new(
+                    //         (x1 + 2) as u16,
+                    //         y1 as u16,
+                    //         (x2 - x1 + 1) as u16,
+                    //         (y2 - y1 + 1) as u16,
+                    //     );
+                    //     self.surface.set_style(area, select);
+
+                    //     // TODO: don't highlight next char in append mode
+                    // }
+
                 }
-
-                let style: Style = view.theme.get("ui.linenr").into();
-                for (screen_row, line) in (view.first_line..=last_line).enumerate() {
-                    self.surface.set_stringn(
-                        0,
-                        screen_row as u16,
-                        format!("{:>5}", line + 1),
-                        5,
-                        style,
-                    );
-                }
-
-                // let lines = state
-                //     .doc
-                //     .lines_at(self.first_line as usize)
-                //     .take(self.size.1 as usize)
-                //     .map(|x| x.as_str().unwrap());
-
-                // // iterate over selections and render them
-                // let select = Style::default().bg(tui::style::Color::LightBlue);
-                // let text = state.doc.slice(..);
-                // for range in state.selection.ranges() {
-                //     // get terminal coords for x,y for each range pos
-                //     // TODO: this won't work with multiline
-                //     let (y1, x1) = coords_at_pos(&text, range.from());
-                //     let (y2, x2) = coords_at_pos(&text, range.to());
-                //     let area = Rect::new(
-                //         (x1 + 2) as u16,
-                //         y1 as u16,
-                //         (x2 - x1 + 1) as u16,
-                //         (y2 - y1 + 1) as u16,
-                //     );
-                //     self.surface.set_style(area, select);
-
-                //     // TODO: don't highlight next char in append mode
-                // }
 
                 // statusline
                 let mode = match view.state.mode() {
@@ -287,11 +292,25 @@ impl Editor {
                 );
                 // TODO: unfocused one with different color
                 let text_color = Style::default().fg(Color::Rgb(219, 191, 239)); // lilac
-                self.surface
-                    .set_string(1, self.size.1 - 1, mode, text_color);
+                if self.size.0 > 1 {
+                    self.surface.set_stringn(
+                        1,
+                        self.size.1 - 1,
+                        mode,
+                        (self.size.0 - 1) as usize,
+                        text_color,
+                    );
+                }
                 if let Some(path) = view.state.path() {
-                    self.surface
-                        .set_string(6, self.size.1 - 1, path.to_string_lossy(), text_color);
+                    if self.size.0 > 6 {
+                        self.surface.set_stringn(
+                            6,
+                            self.size.1 - 1,
+                            path.to_string_lossy(),
+                            (self.size.0 - 6) as usize,
+                            text_color,
+                        );
+                    }
                 }
 
                 // Draw the prompt on the existing status row. Its completion
