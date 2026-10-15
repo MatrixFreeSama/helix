@@ -417,6 +417,7 @@ dependencies = [
  "num_cpus",
  "smol",
  "tui",
+ "unicode-segmentation",
 ]
 
 [[package]]
