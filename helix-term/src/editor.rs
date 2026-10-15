@@ -36,6 +36,8 @@ pub struct Editor {
     surface: Surface,
     cache: Surface,
     prompt: Option<Prompt>,
+    render_bytes: Vec<u8>,
+    render_revision: Option<u64>,
 }
 
 impl Editor {
@@ -48,11 +50,13 @@ impl Editor {
 
         let mut editor = Editor {
             terminal,
-            view: None,
+            view: Some(View::empty(size)),
             size,
             surface: Surface::empty(area),
             cache: Surface::empty(area),
             prompt: None,
+            render_bytes: Vec::new(),
+            render_revision: None,
         };
 
         if let Some(file) = args.files.pop() {
@@ -64,6 +68,7 @@ impl Editor {
 
     pub fn open(&mut self, path: PathBuf) -> Result<(), Error> {
         self.view = Some(View::open(path, self.size)?);
+        self.render_revision = None;
         Ok(())
     }
 
@@ -92,8 +97,15 @@ impl Editor {
                     return;
                 }
 
-                // TODO: inefficient, should feed chunks.iter() to tree_sitter.parse_with(|offset, pos|)
-                let source_code = view.state.doc().to_string();
+                // Source is immutable between document transactions. Reuse the
+                // same bytes for navigation, resize, selection and prompt UI.
+                if self.render_revision != Some(view.state.revision()) {
+                    self.render_bytes.clear();
+                    for chunk in view.state.doc().chunks() {
+                        self.render_bytes.extend_from_slice(chunk.as_bytes());
+                    }
+                    self.render_revision = Some(view.state.revision());
+                }
 
                 let last_line = view
                     .first_line
@@ -116,7 +128,7 @@ impl Editor {
                 let highlights: Vec<_> = match view.state.syntax.as_mut() {
                     Some(syntax) => {
                         syntax
-                            .highlight_iter(source_code.as_bytes(), Some(range), None, |_| None)
+                            .highlight_iter(&self.render_bytes, Some(range), None, |_| None)
                             .unwrap()
                             .collect() // TODO: we collect here to avoid double borrow, fix later
                     }
@@ -174,7 +186,7 @@ impl Editor {
 
                             // iterate over range char by char
                             for grapheme in RopeGraphemes::new(&text) {
-                                // TODO: track current char_index
+                                let grapheme: Cow<str> = Cow::from(grapheme);
 
                                 if grapheme == "\n" {
                                     visual_x = 0;
@@ -185,8 +197,6 @@ impl Editor {
                                         break 'outer;
                                     }
                                 } else {
-                                    // Borrow from rope chunks when possible.
-                                    let grapheme: Cow<str> = Cow::from(grapheme);
                                     let width =
                                         display_grapheme_width(&grapheme, visual_x as usize) as u16;
 
@@ -223,7 +233,7 @@ impl Editor {
                                     visual_x = visual_x.saturating_add(width);
                                 }
 
-                                char_index += 1;
+                                char_index += grapheme.chars().count();
                             }
                         }
                     }
@@ -409,10 +419,35 @@ impl Editor {
                 Some(Ok(Event::Key(event))) => {
                     // Prompt takes priority. It never passes keystrokes through
                     // to the editor's document-command dispatcher.
-                    if let Some(prompt) = &mut self.prompt {
-                        match prompt.handle(event) {
+                    if self.prompt.is_some() {
+                        let outcome = self.prompt.as_mut().unwrap().handle(event);
+                        match outcome {
                             Outcome::Cancelled => self.prompt = None,
-                            Outcome::Execute(Action::Quit) => break,
+                            Outcome::Execute(action) => {
+                                match action {
+                                    Action::Quit => {
+                                        if self.view.as_ref().map_or(false, |v| v.state.is_dirty()) {
+                                            self.prompt.as_mut().unwrap().mark_invalid();
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                    Action::ForceQuit => break,
+                                    Action::Write | Action::WriteQuit => {
+                                        let filename = self.prompt.as_ref()
+                                            .and_then(|prompt| prompt.argument())
+                                            .map(PathBuf::from);
+                                        let result = self.view.as_mut().unwrap().state.save(filename);
+                                        if result.is_err() {
+                                            self.prompt.as_mut().unwrap().mark_invalid();
+                                        } else if action == Action::WriteQuit {
+                                            break;
+                                        } else {
+                                            self.prompt = None;
+                                        }
+                                    }
+                                }
+                            }
                             Outcome::Edited => (),
                         }
                         self.render();
@@ -427,6 +462,13 @@ impl Editor {
                                     | crossterm::event::KeyModifiers::ALT,
                             )
                         {
+                            // No normal-mode shortcut may lose unsaved work.
+                            if view.state.is_dirty() {
+                                self.prompt = Some(Prompt::new());
+                                self.prompt.as_mut().unwrap().mark_invalid();
+                                self.render();
+                                continue;
+                            }
                             break;
                         }
                         if mode == Mode::Normal
