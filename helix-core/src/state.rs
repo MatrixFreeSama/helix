@@ -14,11 +14,13 @@ static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 // The temporary file lives beside its destination. On failure the temporary
 // file is unlinked, while the original file remains intact.
-struct PendingSave(PathBuf);
+struct PendingSave(Option<PathBuf>);
 
 impl Drop for PendingSave {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+        if let Some(path) = self.0.take() {
+            let _ = fs::remove_file(path);
+        }
     }
 }
 
@@ -155,7 +157,7 @@ impl State {
             .open(&temp_path)?;
         // Cleanup ownership begins only after create_new succeeds. Never
         // remove a preexisting file when the exclusive create fails.
-        let guard = PendingSave(temp_path.clone());
+        let mut guard = PendingSave(Some(temp_path.clone()));
         if let Some(metadata) = previous {
             file.set_permissions(metadata.permissions())?;
         }
@@ -165,6 +167,9 @@ impl State {
         file.sync_all()?;
         drop(file);
         fs::rename(&temp_path, &path)?;
+        // Ownership ended with the rename; never unlink an unrelated
+        // temporary file that might subsequently reuse the same name.
+        guard.0 = None;
         #[cfg(unix)]
         fs::File::open(parent)?.sync_all()?;
         drop(guard);
