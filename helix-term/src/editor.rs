@@ -319,6 +319,15 @@ impl Editor {
                         self.surface
                             .set_string(self.size.0 - 1, status_y, "?", text_color);
                     }
+                    if let Some(message) = prompt.error() {
+                        self.surface.set_stringn(
+                            0,
+                            status_y,
+                            message,
+                            self.size.0 as usize,
+                            text_color,
+                        );
+                    }
                     if let Some(layout) = prompt.layout(self.size) {
                         let top = status_y - layout.rows as u16;
                         self.surface.set_style(
@@ -427,7 +436,9 @@ impl Editor {
                                 match action {
                                     Action::Quit => {
                                         if self.view.as_ref().map_or(false, |v| v.state.is_dirty()) {
-                                            self.prompt.as_mut().unwrap().mark_invalid();
+                                            self.prompt.as_mut().unwrap().mark_error(
+                                                "Unsaved changes: use :w, :wq or :q!".to_string(),
+                                            );
                                         } else {
                                             break;
                                         }
@@ -438,8 +449,10 @@ impl Editor {
                                             .and_then(|prompt| prompt.argument())
                                             .map(PathBuf::from);
                                         let result = self.view.as_mut().unwrap().state.save(filename);
-                                        if result.is_err() {
-                                            self.prompt.as_mut().unwrap().mark_invalid();
+                                        if let Err(error) = result {
+                                            self.prompt.as_mut().unwrap().mark_error(format!(
+                                                "Save failed: {}", error
+                                            ));
                                         } else if action == Action::WriteQuit {
                                             break;
                                         } else {
@@ -465,7 +478,9 @@ impl Editor {
                             // No normal-mode shortcut may lose unsaved work.
                             if view.state.is_dirty() {
                                 self.prompt = Some(Prompt::new());
-                                self.prompt.as_mut().unwrap().mark_invalid();
+                                self.prompt.as_mut().unwrap().mark_error(
+                                    "Unsaved changes: use :w, :wq or :q!".to_string(),
+                                );
                                 self.render();
                                 continue;
                             }
