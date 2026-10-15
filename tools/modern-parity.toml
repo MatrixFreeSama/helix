@@ -1,0 +1,9 @@
+# Explicitly preserve the historical industrial fork's byte-preserving save semantics.
+# The upstream default for insert-final-newline is true; that is an observable
+# difference (a newly created file containing "Z" otherwise saves as "Z\n").
+# The modern implementation's atomic-save is retained, not replaced.
+[editor]
+insert-final-newline = false
+atomic-save = true
+trim-final-newlines = false
+trim-trailing-whitespace = false
