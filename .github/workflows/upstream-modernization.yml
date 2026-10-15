@@ -86,8 +86,8 @@ jobs:
           exec "$HX_REAL_BIN" --config "$HX_PARITY_CONFIG" "$@"
           SH
           chmod +x "$RUNNER_TEMP/hx-modern-parity"
-          HX_REAL_BIN="$(realpath modern/target/release/hx)" \\
-          HX_PARITY_CONFIG="$RUNNER_TEMP/industrial-parity/helix/config.toml" \\
+          export HX_REAL_BIN="$(realpath modern/target/release/hx)"
+          export HX_PARITY_CONFIG="$RUNNER_TEMP/industrial-parity/helix/config.toml"
           python3 industrial/tests/persistence_pty.py "$RUNNER_TEMP/hx-modern-parity"
 
   stage-modern:
