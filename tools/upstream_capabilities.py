@@ -94,8 +94,8 @@ def markdown(data):
         )
     rows.extend((
         "",
-        f"Fork commit: \`{fork['sha']}\`",
-        f"Upstream commit: \`{upstream['sha']}\`",
+        f"Fork commit: {fork['sha']}",
+        f"Upstream commit: {upstream['sha']}",
         "",
         "Presence of a source path does not prove runtime behavior; absent paths "
         "do not prove all equivalent features are absent. Tests and runtime "
