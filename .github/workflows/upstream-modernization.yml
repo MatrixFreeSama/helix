@@ -5,11 +5,13 @@ on:
     paths:
       - "tools/upstream_capabilities.py"
       - ".github/workflows/upstream-modernization.yml"
+      - "tools/modern-parity.toml"
   push:
     branches: [master]
     paths:
       - "tools/upstream_capabilities.py"
       - ".github/workflows/upstream-modernization.yml"
+      - "tools/modern-parity.toml"
   workflow_dispatch:
   schedule:
     - cron: "17 03 * * 1"
@@ -69,7 +71,14 @@ jobs:
       - name: Build the real modern terminal
         working-directory: modern
         run: cargo +1.90.0 build --release --locked -p helix-term --bin hx
+      - name: Apply the explicit industrial UX parity configuration
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/industrial-parity/helix"
+          cp industrial/tools/modern-parity.toml "$RUNNER_TEMP/industrial-parity/helix/config.toml"
       - name: Apply identical real-file persistence contract to modern Helix
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/industrial-parity
         run: python3 industrial/tests/persistence_pty.py modern/target/release/hx
 
   stage-modern:
