@@ -2,6 +2,7 @@ name: Industrial editor regression and PTY pressure
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches: [master]
 
