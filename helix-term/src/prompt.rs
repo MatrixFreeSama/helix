@@ -41,6 +41,7 @@ pub struct Prompt {
     cursor: usize,
     selected: Option<usize>,
     invalid: bool,
+    error: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -66,6 +67,15 @@ impl Prompt {
 
     pub fn mark_invalid(&mut self) {
         self.invalid = true;
+    }
+
+    pub fn mark_error(&mut self, message: String) {
+        self.invalid = true;
+        self.error = Some(message);
+    }
+
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
     }
 
     /// An optional filename following a space, shared by :w and :wq.
@@ -131,6 +141,7 @@ impl Prompt {
     fn changed(&mut self) {
         self.selected = None;
         self.invalid = false;
+        self.error = None;
     }
 
     fn request(&self) -> Option<Action> {
