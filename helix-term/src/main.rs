@@ -22,13 +22,10 @@ static EX: smol::Executor = smol::Executor::new();
 fn main() -> Result<(), Error> {
     let args: Args = argh::from_env();
 
-    for _ in 0..num_cpus::get() {
-        std::thread::spawn(move || smol::block_on(EX.run(smol::future::pending::<()>())));
-    }
-
-    smol::block_on(EX.run(async {
-        editor::Editor::new(args).unwrap().run().await;
-    }));
-
-    Ok(())
+    // The interactive editor owns one event loop. Do not start one idle
+    // executor per CPU; the OS can migrate this necessary worker dynamically.
+    smol::block_on(EX.run(async move {
+        let mut editor = editor::Editor::new(args)?;
+        editor.run().await
+    }))
 }

@@ -48,7 +48,10 @@ def run_case(binary, folder, name):
                 step(b"i")
                 step(b"q")  # q is literal text in Insert mode.
                 step(b"\x1b")
-                os.write(master, b"q")
+                # Dirty-buffer guard must reject normal-mode quit.
+                for raw in (b":", b"q", b"!"):
+                    step(raw)
+                os.write(master, b"\r")
             elif name == "tab_completion":
                 step(b"\t")  # Select a candidate without rewriting typed prefix.
                 os.write(master, b"\r")  # Accept the selected actual :q command.
@@ -62,7 +65,7 @@ def run_case(binary, folder, name):
                 step(b"\x1b")
                 os.write(master, b"q")
             else:
-                for columns, rows in [(29, 3), (12, 2), (9, 2), (7, 2), (60, 20)]:
+                for columns, rows in [(29, 3), (12, 2), (9, 2), (7, 2), (6, 1), (2, 1), (1, 1), (1, 2), (60, 20)]:
                     resize(master, rows, columns)
                     os.kill(proc.pid, signal.SIGWINCH)
                     step(b"x")

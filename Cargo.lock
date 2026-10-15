@@ -414,7 +414,6 @@ dependencies = [
  "crossterm",
  "helix-core",
  "helix-view",
- "num_cpus",
  "smol",
  "tui",
  "unicode-segmentation",
@@ -429,15 +428,6 @@ dependencies = [
  "helix-core",
  "once_cell",
  "tui",
-]
-
-[[package]]
-name = "hermit-abi"
-version = "0.1.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c30f6d0bc6b00693347368a67d41b58f2fb851215ff1da49e90fe2c5c667151"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -538,16 +528,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a31937dea023539c72ddae0e3571deadc1414b300483fa7aaec176168cfa9d2"
 dependencies = [
  "winapi",
-]
-
-[[package]]
-name = "num_cpus"
-version = "1.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05499f3756671c15885fee9034446956fff3f243d6077b91e5767df161f766b3"
-dependencies = [
- "hermit-abi",
- "libc",
 ]
 
 [[package]]

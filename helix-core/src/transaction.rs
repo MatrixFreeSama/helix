@@ -209,7 +209,7 @@ impl ChangeSet {
                 }
                 Insert(s) => {
                     text.insert(pos, s);
-                    pos += s.len();
+                    pos += s.chars().count();
                 }
             }
         }
@@ -219,8 +219,11 @@ impl ChangeSet {
     /// `true` when the set is empty.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        let len = self.changes.len();
-        len == 0 || (len == 1 && self.changes[0] == Operation::Retain(self.len))
+        self.changes.iter().all(|operation| match operation {
+            Operation::Retain(_) | Operation::Delete(0) => true,
+            Operation::Insert(text) if text.is_empty() => true,
+            _ => false,
+        })
     }
 
     /// Map a position through the changes.
@@ -335,6 +338,7 @@ impl Transaction {
             if !self.changes.apply(&mut state.doc) {
                 return false;
             }
+            state.revision = state.revision.wrapping_add(1);
 
             if let Some(syntax) = &mut state.syntax {
                 // TODO: no unwrap
@@ -414,6 +418,24 @@ impl From<ChangeSet> for Transaction {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn zero_length_deletion_does_not_dirty_an_unmodified_buffer() {
+        let mut state = State::new(Rope::new());
+        let tx = Transaction::change_by_selection(&state, |range| (range.head, range.head, None));
+        assert!(tx.apply(&mut state));
+        assert!(!state.is_dirty());
+    }
+
+    #[test]
+    fn unicode_multicursor_inserts_use_character_positions_not_byte_lengths() {
+        let mut state = State::new(Rope::from("ab"));
+        state.selection = Selection::new(vec![Range::new(0, 0), Range::new(2, 2)].into(), 0);
+        let tx = Transaction::insert(&state, "你".into());
+        assert!(tx.apply(&mut state));
+        assert_eq!(state.doc.to_string(), "你ab你");
+        assert!(state.is_dirty());
+    }
 
     #[test]
     fn composition() {

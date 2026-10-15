@@ -3,7 +3,26 @@ use crate::syntax::LOADER;
 use crate::{Position, Range, Rope, RopeSlice, Selection, Syntax};
 use anyhow::Error;
 
-use std::path::PathBuf;
+use std::{
+    fs::{self, OpenOptions},
+    io::{self, BufReader, Write},
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+};
+
+static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+// The temporary file lives beside its destination. On failure the temporary
+// file is unlinked, while the original file remains intact.
+struct PendingSave(Option<PathBuf>);
+
+impl Drop for PendingSave {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Mode {
@@ -23,6 +42,8 @@ pub struct State {
 
     //
     pub syntax: Option<Syntax>,
+    pub(crate) revision: u64,
+    saved_revision: u64,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -47,17 +68,18 @@ impl State {
             selection: Selection::single(0, 0),
             mode: Mode::Normal,
             syntax: None,
+            revision: 0,
+            saved_revision: 0,
         }
     }
 
     // TODO: passing scopes here is awkward
     pub fn load(path: PathBuf, scopes: &[String]) -> Result<Self, Error> {
-        use std::{env, fs::File, io::BufReader, path::PathBuf};
-        let _current_dir = env::current_dir()?;
-
-        let doc = Rope::from_reader(BufReader::new(File::open(path.clone())?))?;
-
-        // TODO: create if not found
+        let doc = match fs::File::open(&path) {
+            Ok(file) => Rope::from_reader(BufReader::new(file))?,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Rope::new(),
+            Err(error) => return Err(error.into()),
+        };
 
         let mut state = Self::new(doc);
 
@@ -73,6 +95,93 @@ impl State {
         state.path = Some(path);
 
         Ok(state)
+    }
+
+    #[inline]
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    #[inline]
+    pub fn is_dirty(&self) -> bool {
+        self.revision != self.saved_revision
+    }
+
+    /// Persist the rope without materializing the entire file in memory.
+    /// A successful same-directory rename commits the replacement atomically
+    /// on the Linux target. Failed writes leave the original file unchanged.
+    pub fn save(&mut self, new_path: Option<PathBuf>) -> io::Result<()> {
+        let path = new_path
+            .or_else(|| self.path.clone())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing file name"))?;
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+
+        // Never silently replace a symlink with an unrelated regular file.
+        let previous = match fs::symlink_metadata(&path) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "refusing to replace symbolic link",
+                    ));
+                }
+                if !metadata.is_file() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "destination is not a regular file",
+                    ));
+                }
+                if metadata.permissions().readonly() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "destination is read-only",
+                    ));
+                }
+                Some(metadata)
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
+
+        let name = path.file_name().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "invalid destination file name")
+        })?;
+        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let temp_name = format!(
+            ".{}.hx-{}-{}.tmp",
+            name.to_string_lossy(),
+            std::process::id(),
+            sequence
+        );
+        let temp_path = parent.join(temp_name);
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)?;
+        // Cleanup ownership begins only after create_new succeeds. Never
+        // remove a preexisting file when the exclusive create fails.
+        let mut guard = PendingSave(Some(temp_path.clone()));
+        if let Some(metadata) = previous {
+            file.set_permissions(metadata.permissions())?;
+        }
+        for chunk in self.doc.chunks() {
+            file.write_all(chunk.as_bytes())?;
+        }
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temp_path, &path)?;
+        // Ownership ended with the rename; never unlink an unrelated
+        // temporary file that might subsequently reuse the same name.
+        guard.0 = None;
+        #[cfg(unix)]
+        fs::File::open(parent)?.sync_all()?;
+        drop(guard);
+        self.path = Some(path);
+        self.saved_revision = self.revision;
+        Ok(())
     }
 
     // TODO: doc/selection accessors

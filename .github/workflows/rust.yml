@@ -6,6 +6,11 @@ on:
   push:
     branches: [master]
 
+# Only the newest revision of a PR needs the expensive full stress suite.
+concurrency:
+  group: industrial-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   statuses: write
@@ -47,6 +52,9 @@ jobs:
       - name: Real command prompt UTF-8 and narrow-terminal boundaries
         id: prompt
         run: python3 tests/prompt_pty_boundaries.py target/release/hx
+      - name: Real disk persistence and dirty-buffer exit protection
+        id: persistence
+        run: python3 tests/persistence_pty.py target/release/hx
 
       - name: Publish acceptance status with linked test evidence
         if: always() && github.event_name == 'pull_request'
@@ -62,14 +70,15 @@ jobs:
               binary: "${{ steps.binary.outcome }}",
               resource_pressure: "${{ steps.pressure.outcome }}",
               navigation_pty: "${{ steps.nav.outcome }}",
-              prompt_pty: "${{ steps.prompt.outcome }}"
+              prompt_pty: "${{ steps.prompt.outcome }}",
+              persistence_pty: "${{ steps.persistence.outcome }}"
             };
             const accepted = Object.values(outcomes).every(x => x === "success");
             await github.rest.repos.createCommitStatus({
               ...context.repo, sha: context.payload.pull_request?.head.sha ?? context.sha,
               state: accepted ? "success" : "failure",
               context: "industrial/historical-pr4",
-              description: accepted ? "8/8 acceptance steps passed" : "Acceptance failed or skipped; inspect Actions logs",
+              description: accepted ? "9/9 acceptance steps passed" : "Acceptance failed or skipped; inspect Actions logs",
               target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             });
       - name: Keep dirty-business measurements even on failure
@@ -81,4 +90,5 @@ jobs:
             dirty-business-results.json
             navigation-boundaries-results.json
             prompt-pty-results.json
+            persistence-results.json
           if-no-files-found: warn
