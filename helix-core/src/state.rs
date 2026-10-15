@@ -149,11 +149,13 @@ impl State {
             sequence
         );
         let temp_path = parent.join(temp_name);
-        let guard = PendingSave(temp_path.clone());
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&temp_path)?;
+        // Cleanup ownership begins only after create_new succeeds. Never
+        // remove a preexisting file when the exclusive create fails.
+        let guard = PendingSave(temp_path.clone());
         if let Some(metadata) = previous {
             file.set_permissions(metadata.permissions())?;
         }
