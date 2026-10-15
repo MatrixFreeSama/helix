@@ -93,8 +93,8 @@ impl Editor {
                     self.size.0.saturating_sub(offset),
                     self.size.1.saturating_sub(1),
                 ); // - 1 for statusline
-                // A zero-sized terminal cannot draw cells; all nonzero
-                // dimensions still render the common status/prompt row.
+                   // A zero-sized terminal cannot draw cells; all nonzero
+                   // dimensions still render the common status/prompt row.
                 if self.size.0 == 0 || self.size.1 == 0 {
                     return;
                 }
@@ -201,7 +201,8 @@ impl Editor {
                                         }
                                     } else {
                                         let width =
-                                            display_grapheme_width(&grapheme, visual_x as usize) as u16;
+                                            display_grapheme_width(&grapheme, visual_x as usize)
+                                                as u16;
 
                                         let style = if visible_selections
                                             .iter()
@@ -277,7 +278,6 @@ impl Editor {
 
                     //     // TODO: don't highlight next char in append mode
                     // }
-
                 }
 
                 // statusline
@@ -470,9 +470,10 @@ impl Editor {
                                         .map(PathBuf::from);
                                     let result = self.view.as_mut().unwrap().state.save(filename);
                                     if let Err(error) = result {
-                                        self.prompt.as_mut().unwrap().mark_error(format!(
-                                            "Save failed: {}", error
-                                        ));
+                                        self.prompt
+                                            .as_mut()
+                                            .unwrap()
+                                            .mark_error(format!("Save failed: {}", error));
                                     } else if action == Action::WriteQuit {
                                         break;
                                     } else {
@@ -497,9 +498,10 @@ impl Editor {
                             // No normal-mode shortcut may lose unsaved work.
                             if view.state.is_dirty() {
                                 self.prompt = Some(Prompt::new());
-                                self.prompt.as_mut().unwrap().mark_error(
-                                    "Unsaved changes: use :w, :wq or :q!".to_string(),
-                                );
+                                self.prompt
+                                    .as_mut()
+                                    .unwrap()
+                                    .mark_error("Unsaved changes: use :w, :wq or :q!".to_string());
                                 self.render();
                                 continue;
                             }
