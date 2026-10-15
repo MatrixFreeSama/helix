@@ -430,7 +430,7 @@ mod test {
     #[test]
     fn unicode_multicursor_inserts_use_character_positions_not_byte_lengths() {
         let mut state = State::new(Rope::from("ab"));
-        state.selection = Selection::new(vec![Range::new(0, 0), Range::new(2, 2)], 0);
+        state.selection = Selection::new(vec![Range::new(0, 0), Range::new(2, 2)].into(), 0);
         let tx = Transaction::insert(&state, "你".into());
         assert!(tx.apply(&mut state));
         assert_eq!(state.doc.to_string(), "你ab你");
