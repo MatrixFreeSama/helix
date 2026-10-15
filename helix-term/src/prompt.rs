@@ -66,6 +66,23 @@ impl Prompt {
             .sum::<usize>()
     }
 
+
+    /// Render the section of the input surrounding the cursor inside the
+    /// terminal width. Clip only at grapheme boundaries.
+    pub fn visible_input(&self, columns: usize) -> (&str, usize) {
+        let mut start = 0;
+        let mut cursor_x = self.cursor_cells();
+        let max_x = columns.saturating_sub(1);
+        for (index, grapheme) in self.line[..self.cursor].grapheme_indices(true) {
+            if cursor_x <= max_x {
+                break;
+            }
+            start = index + grapheme.len();
+            cursor_x = cursor_x.saturating_sub(grapheme_width(grapheme));
+        }
+        (&self.line[start..], cursor_x)
+    }
+
     fn matches(&self) -> impl Iterator<Item = &'static CommandSpec> + '_ {
         COMMANDS.iter().filter(move |cmd| cmd.name.starts_with(&self.line))
     }
@@ -251,6 +268,19 @@ mod tests {
         prompt.handle(key(KeyCode::Char('x')));
         assert_eq!(prompt.text(), "xq");
         assert_eq!(prompt.handle(key(KeyCode::Enter)), Outcome::Edited);
+    }
+
+    #[test]
+    fn long_unicode_prompt_is_clipped_at_grapheme_boundaries() {
+        let mut prompt = Prompt::new();
+        for c in "天地玄黄🙂".chars() {
+            prompt.handle(key(KeyCode::Char(c)));
+        }
+        for width in 0..12 {
+            let (visible, x) = prompt.visible_input(width);
+            assert!(std::str::from_utf8(visible.as_bytes()).is_ok());
+            assert!(x < width || width < 2);
+        }
     }
 
     #[test]
