@@ -209,7 +209,7 @@ impl ChangeSet {
                 }
                 Insert(s) => {
                     text.insert(pos, s);
-                    pos += s.len();
+                    pos += s.chars().count();
                 }
             }
         }
@@ -415,6 +415,16 @@ impl From<ChangeSet> for Transaction {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn unicode_multicursor_inserts_use_character_positions_not_byte_lengths() {
+        let mut state = State::new(Rope::from("ab"));
+        state.selection = Selection::new(vec![Range::new(0, 0), Range::new(2, 2)], 0);
+        let tx = Transaction::insert(&state, "你".into());
+        assert!(tx.apply(&mut state));
+        assert_eq!(state.doc.to_string(), "你ab你");
+        assert!(state.is_dirty());
+    }
 
     #[test]
     fn composition() {
