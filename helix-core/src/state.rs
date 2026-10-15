@@ -40,7 +40,7 @@ pub struct State {
 
     //
     pub syntax: Option<Syntax>,
-    revision: u64,
+    pub(crate) revision: u64,
     saved_revision: u64,
 }
 
