@@ -492,10 +492,9 @@ impl Editor {
                             Some(keymap::TerminalBinding::Quit) => {
                                 if view.state.is_dirty() {
                                     self.prompt = Some(Prompt::new());
-                                    self.prompt
-                                        .as_mut()
-                                        .unwrap()
-                                        .mark_error("Unsaved changes: use :w, :wq or :q!".to_string());
+                                    self.prompt.as_mut().unwrap().mark_error(
+                                        "Unsaved changes: use :w, :wq or :q!".to_string(),
+                                    );
                                     self.render();
                                 } else {
                                     break;
