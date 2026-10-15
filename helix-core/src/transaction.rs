@@ -219,8 +219,11 @@ impl ChangeSet {
     /// `true` when the set is empty.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        let len = self.changes.len();
-        len == 0 || (len == 1 && self.changes[0] == Operation::Retain(self.len))
+        self.changes.iter().all(|operation| match operation {
+            Operation::Retain(_) | Operation::Delete(0) => true,
+            Operation::Insert(text) if text.is_empty() => true,
+            _ => false,
+        })
     }
 
     /// Map a position through the changes.
@@ -415,6 +418,14 @@ impl From<ChangeSet> for Transaction {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn zero_length_deletion_does_not_dirty_an_unmodified_buffer() {
+        let mut state = State::new(Rope::new());
+        let tx = Transaction::change_by_selection(&state, |range| (range.head, range.head, None));
+        assert!(tx.apply(&mut state));
+        assert!(!state.is_dirty());
+    }
 
     #[test]
     fn unicode_multicursor_inserts_use_character_positions_not_byte_lengths() {
