@@ -231,7 +231,7 @@ impl Editor {
                                                 );
                                             } else if width <= remaining {
                                                 self.surface
-                                                    .set_string(screen_x, line, grapheme, style);
+                                                    .set_string(screen_x, line, &grapheme, style);
                                             }
                                         }
                                         visual_x = visual_x.saturating_add(width);
