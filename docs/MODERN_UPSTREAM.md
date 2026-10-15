@@ -19,13 +19,16 @@ the exact input bytes. The explicit parity profile at
 `tools/modern-parity.toml` sets `insert-final-newline = false` and preserves
 upstream's native `atomic-save = true`.
 
-The CI copies the profile to a private temporary `XDG_CONFIG_HOME/helix/config.toml`
-and runs the **same five real-file persistence PTY cases** against the modern
-binary. A default-setting discrepancy is reported, not silently ignored.
+The CI copies the profile to a private temporary file and passes its
+absolute path to the real modern binary via the documented `--config` CLI
+argument. It does not depend on a particular XDG base-directory strategy.
+The CI then runs the **same five real-file persistence PTY cases** against
+the modern binary. A default-setting discrepancy is reported, not silently ignored.
 
-For a local modern build, copy the profile to the user Helix configuration
-location (usually `~/.config/helix/config.toml` on Unix), merging with existing
-settings rather than blindly replacing custom configuration.
+For a local modern build, start `hx --config /path/to/modern-parity.toml FILE`
+or merge this profile into the user Helix configuration (usually
+`~/.config/helix/config.toml` on Unix). Explicit `--config` is the preferred
+reproducible contract, and avoids guessing a configuration directory.
 
 ## Industrial promotion requirements
 
