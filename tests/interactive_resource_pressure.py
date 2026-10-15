@@ -288,8 +288,11 @@ def main(binary):
 
                 # Quit intentionally ends the process; do not demand an ACK
                 # from a PTY that may close before we can read its last frame.
-                press(master, proc, b"\x1b")  # Leave Insert; q is text there, not Quit.
-                os.write(master, b"q")
+                press(master, proc, b"\x1b")  # Leave Insert.
+                # The edited buffer is dirty; only an explicit force-quit may discard it.
+                for raw in (b":", b"q", b"!"):
+                    press(master, proc, raw)
+                os.write(master, b"\r")
                 proc.wait(timeout=10)
                 if proc.returncode != 0:
                     raise RuntimeError("hx did not exit cleanly: " + str(proc.returncode))
