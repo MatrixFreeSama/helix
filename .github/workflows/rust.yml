@@ -32,6 +32,8 @@ jobs:
         run: python3 tests/interactive_resource_pressure.py target/release/hx
       - name: Empty, tiny and 70k-line real terminal navigation
         run: python3 tests/navigation_pty_boundaries.py target/release/hx
+      - name: Real command prompt UTF-8 and narrow-terminal boundaries
+        run: python3 tests/prompt_pty_boundaries.py target/release/hx
       - name: Keep dirty-business measurements even on failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -40,4 +42,5 @@ jobs:
           path: |
             dirty-business-results.json
             navigation-boundaries-results.json
+            prompt-pty-results.json
           if-no-files-found: warn
