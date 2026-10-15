@@ -1,8 +1,9 @@
-name: Build and key-dispatch stress
+name: Industrial editor regression and PTY pressure
 
 on:
   pull_request:
   push:
+    branches: [master]
 
 permissions:
   contents: read
@@ -48,7 +49,7 @@ jobs:
         run: python3 tests/prompt_pty_boundaries.py target/release/hx
 
       - name: Report reproducible acceptance to commit and PR
-        if: always()
+        if: always() && github.event_name == 'pull_request'
         continue-on-error: true
         uses: actions/github-script@v7
         with:
