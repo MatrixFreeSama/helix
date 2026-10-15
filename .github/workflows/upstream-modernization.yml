@@ -77,9 +77,18 @@ jobs:
           mkdir -p "$RUNNER_TEMP/industrial-parity/helix"
           cp industrial/tools/modern-parity.toml "$RUNNER_TEMP/industrial-parity/helix/config.toml"
       - name: Apply identical real-file persistence contract to modern Helix
-        env:
-          XDG_CONFIG_HOME: ${{ runner.temp }}/industrial-parity
-        run: python3 industrial/tests/persistence_pty.py modern/target/release/hx
+        run: |
+          set -euo pipefail
+          # --config is the official explicit source of editor configuration.
+          # XDG_CONFIG_HOME alone may not be selected by all base strategies.
+          cat > "$RUNNER_TEMP/hx-modern-parity" <<'SH'
+          #!/usr/bin/env bash
+          exec "$HX_REAL_BIN" --config "$HX_PARITY_CONFIG" "$@"
+          SH
+          chmod +x "$RUNNER_TEMP/hx-modern-parity"
+          export HX_REAL_BIN="$(realpath modern/target/release/hx)"
+          export HX_PARITY_CONFIG="$RUNNER_TEMP/industrial-parity/helix/config.toml"
+          python3 industrial/tests/persistence_pty.py "$RUNNER_TEMP/hx-modern-parity"
 
   stage-modern:
     if: github.event_name != 'pull_request'
