@@ -21,3 +21,4 @@ smol = "1"
 num_cpus = "1.13"
 tui = { version = "0.11", default-features = false, features = ["crossterm"] }
 crossterm = { version = "0.17", features = ["event-stream"] }
+unicode-segmentation = "1"

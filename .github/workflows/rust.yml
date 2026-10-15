@@ -1,9 +1,14 @@
-name: Build and key-dispatch stress
+name: Industrial editor regression and PTY pressure
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches: [master]
+
+permissions:
+  contents: read
+  statuses: write
 
 jobs:
   integration-and-stress:
@@ -19,19 +24,54 @@ jobs:
           rustup toolchain install stable --profile minimal --component rustfmt
           rustup default stable
       - name: Rust formatting
+        id: format
         run: cargo fmt --all -- --check
       - name: Compile workspace
+        id: compile
         run: cargo check --workspace --all-features
       - name: Regression tests including million-key stress
+        id: unit
         run: cargo test --workspace --all-features -- --nocapture
       - name: 3M-event release performance comparison
+        id: bench
         run: cargo run --release -p helix-view --features term --example keymap_stress
       - name: Build actual Helix terminal binary
+        id: binary
         run: cargo build --release -p helix-term --bin hx
       - name: Live CPU withdrawal and external resource-pressure PTY test
+        id: pressure
         run: python3 tests/interactive_resource_pressure.py target/release/hx
       - name: Empty, tiny and 70k-line real terminal navigation
+        id: nav
         run: python3 tests/navigation_pty_boundaries.py target/release/hx
+      - name: Real command prompt UTF-8 and narrow-terminal boundaries
+        id: prompt
+        run: python3 tests/prompt_pty_boundaries.py target/release/hx
+
+      - name: Publish acceptance status with linked test evidence
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const outcomes = {
+              format: "${{ steps.format.outcome }}",
+              compile: "${{ steps.compile.outcome }}",
+              unit: "${{ steps.unit.outcome }}",
+              benchmark: "${{ steps.bench.outcome }}",
+              binary: "${{ steps.binary.outcome }}",
+              resource_pressure: "${{ steps.pressure.outcome }}",
+              navigation_pty: "${{ steps.nav.outcome }}",
+              prompt_pty: "${{ steps.prompt.outcome }}"
+            };
+            const accepted = Object.values(outcomes).every(x => x === "success");
+            await github.rest.repos.createCommitStatus({
+              ...context.repo, sha: context.payload.pull_request?.head.sha ?? context.sha,
+              state: accepted ? "success" : "failure",
+              context: "industrial/historical-pr4",
+              description: accepted ? "8/8 acceptance steps passed" : "Acceptance failed or skipped; inspect Actions logs",
+              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });
       - name: Keep dirty-business measurements even on failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -40,4 +80,5 @@ jobs:
           path: |
             dirty-business-results.json
             navigation-boundaries-results.json
+            prompt-pty-results.json
           if-no-files-found: warn

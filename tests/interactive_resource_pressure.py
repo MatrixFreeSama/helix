@@ -168,6 +168,16 @@ def navigation_phase(name, fd, proc):
     record(name, latencies)
 
 
+def command_prompt_phase(name, fd, proc):
+    # From Insert mode, exercise the live prompt under CPU/memory/I/O load.
+    # The editor must not interpret candidate selection as a document keystroke.
+    press(fd, proc, b"\x1b")
+    sequence = [
+        b":", b"\t", b"x", b"\r", b"\x7f", b"\x1b", b"i"
+    ]
+    record(name, [press(fd, proc, code) for code in sequence])
+
+
 def input_phase(name, fd, proc, count=SAMPLES_PER_PHASE):
     latencies = []
     for i in range(count):
@@ -261,6 +271,7 @@ def main(binary):
                 input_phase("cpu_memory_io_contention", master, proc)
                 set_affinity_all(proc.pid, {cpus[0]})
                 input_phase("cpu_withdrawal_under_contention", master, proc)
+                command_prompt_phase("completion_under_contention", master, proc)
                 press(master, proc, b"\x1b")  # Leave insert mode for Goto under pressure.
                 navigation_phase("goto_and_page_under_contention", master, proc)
                 set_affinity_all(proc.pid, set(cpus))
@@ -277,6 +288,7 @@ def main(binary):
 
                 # Quit intentionally ends the process; do not demand an ACK
                 # from a PTY that may close before we can read its last frame.
+                press(master, proc, b"\x1b")  # Leave Insert; q is text there, not Quit.
                 os.write(master, b"q")
                 proc.wait(timeout=10)
                 if proc.returncode != 0:

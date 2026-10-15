@@ -1,3 +1,4 @@
+use crate::prompt::{Action, Outcome, Prompt};
 use crate::Args;
 use helix_core::{state::Mode, syntax::HighlightEvent, Range, State};
 use helix_view::{commands, keymap, view::display_grapheme_width, View};
@@ -34,6 +35,7 @@ pub struct Editor {
     size: (u16, u16),
     surface: Surface,
     cache: Surface,
+    prompt: Option<Prompt>,
 }
 
 impl Editor {
@@ -50,7 +52,7 @@ impl Editor {
             size,
             surface: Surface::empty(area),
             cache: Surface::empty(area),
-            // TODO; move to state
+            prompt: None,
         };
 
         if let Some(file) = args.files.pop() {
@@ -282,6 +284,61 @@ impl Editor {
                         .set_string(6, self.size.1 - 1, path.to_string_lossy(), text_color);
                 }
 
+                // Draw the prompt on the existing status row. Its completion
+                // rectangle always lies within the actual terminal surface.
+                // This is rendering only: keystrokes own all prompt state.
+                if let Some(prompt) = &self.prompt {
+                    let status_y = self.size.1 - 1;
+                    self.surface.set_style(
+                        Rect::new(0, status_y, self.size.0, 1),
+                        view.theme.get("ui.statusline").into(),
+                    );
+                    let (visible, _) = prompt.visible_input(self.size.0 as usize);
+                    self.surface.set_stringn(0, status_y, ":", 1, text_color);
+                    if self.size.0 > 1 {
+                        self.surface.set_stringn(
+                            1,
+                            status_y,
+                            visible,
+                            (self.size.0 - 1) as usize,
+                            text_color,
+                        );
+                    }
+                    if prompt.invalid() && self.size.0 > 1 {
+                        // Invalid input stays open. The next edit clears this marker.
+                        self.surface
+                            .set_string(self.size.0 - 1, status_y, "?", text_color);
+                    }
+                    if let Some(layout) = prompt.layout(self.size) {
+                        let top = status_y - layout.rows as u16;
+                        self.surface.set_style(
+                            Rect::new(0, top, self.size.0, layout.rows as u16),
+                            view.theme.get("ui.statusline").into(),
+                        );
+                        for (offset, (index, name)) in prompt
+                            .candidates()
+                            .skip(layout.first)
+                            .take(layout.rows * layout.columns)
+                            .enumerate()
+                        {
+                            let x = offset % layout.columns * layout.cell_width;
+                            let y = top as usize + offset / layout.columns;
+                            let style = if prompt.selection() == Some(index) {
+                                text_color.bg(Color::Rgb(104, 60, 232))
+                            } else {
+                                text_color
+                            };
+                            self.surface.set_stringn(
+                                x as u16,
+                                y as u16,
+                                name,
+                                layout.cell_width.min(self.size.0 as usize - x),
+                                style,
+                            );
+                        }
+                    }
+                }
+
                 self.terminal
                     .backend_mut()
                     .draw(self.cache.diff(&self.surface).into_iter());
@@ -294,19 +351,31 @@ impl Editor {
                     Mode::Normal | Mode::Goto => write!(stdout, "\x1B[2 q"),
                 };
 
-                // The position is already viewport-relative: do not subtract
-                // first_line again, and hide the cursor when it is offscreen.
-                let pos = view.state.selection().cursor();
-                if let Some(coords) = view.visible_cursor_position(pos, viewport.height) {
-                    let x = coords.col.saturating_add(viewport.x as usize);
-                    let y = coords.row.saturating_add(viewport.y as usize);
-                    if x < self.size.0 as usize && y < viewport.height as usize {
-                        execute!(stdout, cursor::Show, cursor::MoveTo(x as u16, y as u16));
+                if let Some(prompt) = &self.prompt {
+                    let (_, x) = prompt.visible_input(self.size.0 as usize);
+                    if x < self.size.0 as usize {
+                        execute!(
+                            stdout,
+                            cursor::Show,
+                            cursor::MoveTo(x as u16, self.size.1 - 1)
+                        );
                     } else {
                         execute!(stdout, cursor::Hide);
                     }
                 } else {
-                    execute!(stdout, cursor::Hide);
+                    // Existing viewport-relative cursor, independent of prompt.
+                    let pos = view.state.selection().cursor();
+                    if let Some(coords) = view.visible_cursor_position(pos, viewport.height) {
+                        let x = coords.col.saturating_add(viewport.x as usize);
+                        let y = coords.row.saturating_add(viewport.y as usize);
+                        if x < self.size.0 as usize && y < viewport.height as usize {
+                            execute!(stdout, cursor::Show, cursor::MoveTo(x as u16, y as u16));
+                        } else {
+                            execute!(stdout, cursor::Hide);
+                        }
+                    } else {
+                        execute!(stdout, cursor::Hide);
+                    }
                 }
             }
             None => (),
@@ -321,7 +390,7 @@ impl Editor {
 
         loop {
             // Handle key events
-            let mut event = reader.next().await;
+            let event = reader.next().await;
             match event {
                 Some(Ok(Event::Resize(width, height))) => {
                     self.size = (width, height);
@@ -337,24 +406,45 @@ impl Editor {
 
                     self.render();
                 }
-                Some(Ok(Event::Key(KeyEvent {
-                    code: KeyCode::Char('q'),
-                    ..
-                }))) => {
-                    break;
-                }
                 Some(Ok(Event::Key(event))) => {
+                    // Prompt takes priority. It never passes keystrokes through
+                    // to the editor's document-command dispatcher.
+                    if let Some(prompt) = &mut self.prompt {
+                        match prompt.handle(event) {
+                            Outcome::Cancelled => self.prompt = None,
+                            Outcome::Execute(Action::Quit) => break,
+                            Outcome::Edited => (),
+                        }
+                        self.render();
+                        continue;
+                    }
                     if let Some(view) = &mut self.view {
                         let mode = view.state.mode();
+                        if mode == Mode::Normal
+                            && event.code == KeyCode::Char('q')
+                            && !event.modifiers.intersects(
+                                crossterm::event::KeyModifiers::CONTROL
+                                    | crossterm::event::KeyModifiers::ALT,
+                            )
+                        {
+                            break;
+                        }
+                        if mode == Mode::Normal
+                            && event.code == KeyCode::Char(':')
+                            && !event.modifiers.intersects(
+                                crossterm::event::KeyModifiers::CONTROL
+                                    | crossterm::event::KeyModifiers::ALT,
+                            )
+                        {
+                            self.prompt = Some(Prompt::new());
+                            self.render();
+                            continue;
+                        }
                         if let Some(command) = keymap::lookup(&keymap, mode, event) {
-                            // TODO: handle count other than 1
                             command(view, 1);
                             view.ensure_cursor_in_view();
                             self.render();
                         } else if mode == Mode::Insert {
-                            // Arbitrary characters are intentionally not entries in the keymap.
-                            // Like the original insert mode, every character is inserted
-                            // regardless of modifier bits.
                             if let KeyEvent {
                                 code: KeyCode::Char(c),
                                 ..
