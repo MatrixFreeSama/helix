@@ -3,7 +3,6 @@ name: Build and key-dispatch stress
 on:
   pull_request:
   push:
-    branches: [master]
 
 permissions:
   contents: read
@@ -49,7 +48,7 @@ jobs:
         run: python3 tests/prompt_pty_boundaries.py target/release/hx
 
       - name: Report reproducible acceptance to commit and PR
-        if: always() && github.event_name == 'pull_request'
+        if: always()
         continue-on-error: true
         uses: actions/github-script@v7
         with:
@@ -85,14 +84,16 @@ jobs:
               `Run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             ].join("\n");
             await github.rest.repos.createCommitStatus({
-              ...context.repo, sha: context.payload.pull_request.head.sha,
+              ...context.repo, sha: context.payload.pull_request?.head.sha ?? context.sha,
               state: accepted ? "success" : "failure",
               context: "industrial/historical-pr4",
               description: accepted ? "8/8 compile and PTY acceptance stages passed" : "Acceptance failed or skipped; inspect PR report"
             });
-            await github.rest.issues.createComment({
-              ...context.repo, issue_number: context.issue.number, body
-            });
+            if (context.payload.pull_request) {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: context.issue.number, body
+              });
+            }
       - name: Keep dirty-business measurements even on failure
         if: always()
         uses: actions/upload-artifact@v4
