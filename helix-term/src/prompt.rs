@@ -20,10 +20,22 @@ struct CommandSpec {
 
 // Every completion is an executable command. No sample command list.
 const COMMANDS: &[CommandSpec] = &[
-    CommandSpec { name: "q", action: Action::Quit },
-    CommandSpec { name: "q!", action: Action::ForceQuit },
-    CommandSpec { name: "w", action: Action::Write },
-    CommandSpec { name: "wq", action: Action::WriteQuit },
+    CommandSpec {
+        name: "q",
+        action: Action::Quit,
+    },
+    CommandSpec {
+        name: "q!",
+        action: Action::ForceQuit,
+    },
+    CommandSpec {
+        name: "w",
+        action: Action::Write,
+    },
+    CommandSpec {
+        name: "wq",
+        action: Action::WriteQuit,
+    },
 ];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -80,7 +92,10 @@ impl Prompt {
 
     /// An optional filename following a space, shared by :w and :wq.
     pub fn argument(&self) -> Option<&str> {
-        self.line.split_once(' ').map(|(_, path)| path.trim()).filter(|path| !path.is_empty())
+        self.line
+            .split_once(' ')
+            .map(|(_, path)| path.trim())
+            .filter(|path| !path.is_empty())
     }
 
     pub fn cursor_cells(&self) -> usize {
@@ -148,9 +163,14 @@ impl Prompt {
         if let Some(selected) = self.selected {
             self.matches().nth(selected).map(|command| command.action)
         } else {
-            let name = self.line.split_once(' ').map_or(self.line.as_str(), |(n, _)| n);
+            let name = self
+                .line
+                .split_once(' ')
+                .map_or(self.line.as_str(), |(n, _)| n);
             let command = COMMANDS.iter().find(|command| command.name == name)?;
-            if self.argument().is_some() && !matches!(command.action, Action::Write | Action::WriteQuit) {
+            if self.argument().is_some()
+                && !matches!(command.action, Action::Write | Action::WriteQuit)
+            {
                 return None;
             }
             Some(command.action)
@@ -280,7 +300,10 @@ mod tests {
             prompt.handle(key(KeyCode::Char(c)));
         }
         assert_eq!(prompt.argument(), Some("file with spaces.txt"));
-        assert_eq!(prompt.handle(key(KeyCode::Enter)), Outcome::Execute(Action::Write));
+        assert_eq!(
+            prompt.handle(key(KeyCode::Enter)),
+            Outcome::Execute(Action::Write)
+        );
         let mut prompt = Prompt::new();
         for c in "q unwanted.txt".chars() {
             prompt.handle(key(KeyCode::Char(c)));
