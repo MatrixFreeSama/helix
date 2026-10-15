@@ -1,0 +1,116 @@
+name: Staged modern upstream integration
+
+on:
+  pull_request:
+    paths:
+      - "tools/upstream_capabilities.py"
+      - ".github/workflows/upstream-modernization.yml"
+  push:
+    branches: [master]
+    paths:
+      - "tools/upstream_capabilities.py"
+      - ".github/workflows/upstream-modernization.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "17 03 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: modern-upstream-integration
+  cancel-in-progress: false
+
+jobs:
+  inventory-self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate inventory logic without network dependencies
+        run: python3 tools/upstream_capabilities.py --self-test
+
+  verify-upstream:
+    if: github.event_name != 'pull_request'
+    needs: inventory-self-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      upstream_sha: ${{ steps.pin.outputs.sha }}
+    steps:
+      # Never run external upstream build scripts in a job with a write token.
+      - uses: actions/checkout@v4
+        with:
+          repository: helix-editor/helix
+          ref: master
+          path: modern
+          persist-credentials: false
+      - name: Pin the exact source revision being verified
+        id: pin
+        run: echo "sha=$(git -C modern rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Install upstream required Rust toolchain
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Check upstream formatting
+        working-directory: modern
+        run: cargo +1.90.0 fmt --all --check
+      - name: Compile all modern editor crates
+        working-directory: modern
+        run: cargo +1.90.0 check --workspace --locked
+      - name: Execute upstream core and workspace regression tests
+        working-directory: modern
+        run: cargo +1.90.0 test --workspace --locked
+      - uses: actions/checkout@v4
+        with:
+          path: industrial
+          persist-credentials: false
+      - name: Build the real modern terminal
+        working-directory: modern
+        run: cargo +1.90.0 build --release --locked -p helix-term --bin hx
+      - name: Apply identical real-file persistence contract to modern Helix
+        run: python3 industrial/tests/persistence_pty.py modern/target/release/hx
+
+  stage-modern:
+    if: github.event_name != 'pull_request'
+    needs: verify-upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      VERIFIED_SHA: ${{ needs.verify-upstream.outputs.upstream_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Fetch only the upstream revision that passed verification
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/helix-editor/helix.git master
+          git cat-file -e "$VERIFIED_SHA^{commit}"
+      - name: Write a factual capability comparison
+        run: |
+          python3 tools/upstream_capabilities.py --fork HEAD --upstream "$VERIFIED_SHA" --json-out upstream-capabilities.json >> "$GITHUB_STEP_SUMMARY"
+          cat upstream-capabilities.json
+      - name: Advance isolated modern integration branch (never master)
+        run: |
+          set -euo pipefail
+          target=refs/heads/integration/modern-upstream
+          old=$(git ls-remote --heads origin "$target" | cut -f1)
+          if [ -n "$old" ]; then
+            git fetch --no-tags origin "$old"
+            if ! git merge-base --is-ancestor "$old" "$VERIFIED_SHA"; then
+              echo "Upstream history diverged; refusing any force update" >&2
+              exit 1
+            fi
+          fi
+          git push origin "$VERIFIED_SHA:$target"
+          echo "Integration branch updated to \`$VERIFIED_SHA\`. Fork master not changed." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: modern-upstream-capability-manifest
+          path: upstream-capabilities.json
+          retention-days: 30
