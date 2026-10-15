@@ -57,7 +57,7 @@ def scenario(binary, root, name):
                 expected = "original\n"
             else:
                 if name == "unnamed_save_as":
-                    command = "w " + str(target)
+                    command = "wq " + str(target)
                 elif name == "overwrite_save":
                     command = "wq"
                 else:
