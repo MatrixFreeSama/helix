@@ -66,7 +66,6 @@ impl Prompt {
             .sum::<usize>()
     }
 
-
     /// Render the section of the input surrounding the cursor inside the
     /// terminal width. Clip only at grapheme boundaries.
     pub fn visible_input(&self, columns: usize) -> (&str, usize) {
@@ -84,11 +83,15 @@ impl Prompt {
     }
 
     fn matches(&self) -> impl Iterator<Item = &'static CommandSpec> + '_ {
-        COMMANDS.iter().filter(move |cmd| cmd.name.starts_with(&self.line))
+        COMMANDS
+            .iter()
+            .filter(move |cmd| cmd.name.starts_with(&self.line))
     }
 
     pub fn candidates(&self) -> impl Iterator<Item = (usize, &'static str)> + '_ {
-        self.matches().enumerate().map(|(index, cmd)| (index, cmd.name))
+        self.matches()
+            .enumerate()
+            .map(|(index, cmd)| (index, cmd.name))
     }
 
     pub fn selection(&self) -> Option<usize> {
@@ -190,7 +193,9 @@ impl Prompt {
                 self.cursor = self.line.len()
             }
             KeyCode::Char(c)
-                if !key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+                if !key
+                    .modifiers
+                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
             {
                 self.line.insert(self.cursor, c);
                 self.cursor += c.len_utf8();
@@ -216,14 +221,23 @@ mod tests {
     #[test]
     fn actual_command_table_drives_completion_and_execution() {
         let mut prompt = Prompt::new();
-        assert_eq!(prompt.candidates().map(|(_, s)| s).collect::<Vec<_>>(), vec!["q"]);
+        assert_eq!(
+            prompt.candidates().map(|(_, s)| s).collect::<Vec<_>>(),
+            vec!["q"]
+        );
         prompt.handle(key(KeyCode::Tab));
         assert_eq!(prompt.selection(), Some(0));
         assert_eq!(prompt.text(), "");
-        assert_eq!(prompt.handle(key(KeyCode::Enter)), Outcome::Execute(Action::Quit));
+        assert_eq!(
+            prompt.handle(key(KeyCode::Enter)),
+            Outcome::Execute(Action::Quit)
+        );
         let mut prompt = Prompt::new();
         prompt.handle(key(KeyCode::Char('q')));
-        assert_eq!(prompt.handle(key(KeyCode::Enter)), Outcome::Execute(Action::Quit));
+        assert_eq!(
+            prompt.handle(key(KeyCode::Enter)),
+            Outcome::Execute(Action::Quit)
+        );
     }
 
     #[test]
