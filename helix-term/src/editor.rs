@@ -1,4 +1,5 @@
-use crate::{prompt::{Action, Outcome, Prompt}, Args};
+use crate::prompt::{Action, Outcome, Prompt};
+use crate::Args;
 use helix_core::{state::Mode, syntax::HighlightEvent, Range, State};
 use helix_view::{commands, keymap, view::display_grapheme_width, View};
 
@@ -296,15 +297,17 @@ impl Editor {
                     self.surface.set_stringn(0, status_y, ":", 1, text_color);
                     if self.size.0 > 1 {
                         self.surface.set_stringn(
-                            1, status_y, visible,
-                            (self.size.0 - 1) as usize, text_color,
+                            1,
+                            status_y,
+                            visible,
+                            (self.size.0 - 1) as usize,
+                            text_color,
                         );
                     }
                     if prompt.invalid() && self.size.0 > 1 {
                         // Invalid input stays open. The next edit clears this marker.
-                        self.surface.set_string(
-                            self.size.0 - 1, status_y, "?", text_color,
-                        );
+                        self.surface
+                            .set_string(self.size.0 - 1, status_y, "?", text_color);
                     }
                     if let Some(layout) = prompt.layout(self.size) {
                         let top = status_y - layout.rows as u16;
@@ -312,7 +315,8 @@ impl Editor {
                             Rect::new(0, top, self.size.0, layout.rows as u16),
                             view.theme.get("ui.statusline").into(),
                         );
-                        for (offset, (index, name)) in prompt.candidates()
+                        for (offset, (index, name)) in prompt
+                            .candidates()
                             .skip(layout.first)
                             .take(layout.rows * layout.columns)
                             .enumerate()
@@ -325,8 +329,11 @@ impl Editor {
                                 text_color
                             };
                             self.surface.set_stringn(
-                                x as u16, y as u16, name,
-                                layout.cell_width.min(self.size.0 as usize - x), style,
+                                x as u16,
+                                y as u16,
+                                name,
+                                layout.cell_width.min(self.size.0 as usize - x),
+                                style,
                             );
                         }
                     }
@@ -347,8 +354,7 @@ impl Editor {
                 if let Some(prompt) = &self.prompt {
                     let (_, x) = prompt.visible_input(self.size.0 as usize);
                     if x < self.size.0 as usize {
-                        execute!(stdout, cursor::Show,
-                            cursor::MoveTo(x as u16, self.size.1 - 1));
+                        execute!(stdout, cursor::Show, cursor::MoveTo(x as u16, self.size.1 - 1));
                     } else {
                         execute!(stdout, cursor::Hide);
                     }
@@ -380,7 +386,7 @@ impl Editor {
 
         loop {
             // Handle key events
-            let mut event = reader.next().await;
+            let event = reader.next().await;
             match event {
                 Some(Ok(Event::Resize(width, height))) => {
                     self.size = (width, height);
@@ -435,7 +441,11 @@ impl Editor {
                             view.ensure_cursor_in_view();
                             self.render();
                         } else if mode == Mode::Insert {
-                            if let KeyEvent { code: KeyCode::Char(c), .. } = event {
+                            if let KeyEvent {
+                                code: KeyCode::Char(c),
+                                ..
+                            } = event
+                            {
                                 commands::insert_char(view, c);
                                 view.ensure_cursor_in_view();
                                 self.render();
