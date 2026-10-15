@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 mod editor;
+mod prompt;
 
 use editor::Editor;
 
