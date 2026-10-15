@@ -62,7 +62,7 @@ def run_case(binary, folder, name):
                 step(b"\x1b")
                 os.write(master, b"q")
             else:
-                for columns, rows in [(29, 3), (12, 2), (9, 2), (7, 2), (60, 20)]:
+                for columns, rows in [(29, 3), (12, 2), (9, 2), (7, 2), (6, 1), (2, 1), (1, 1), (1, 2), (60, 20)]:
                     resize(master, rows, columns)
                     os.kill(proc.pid, signal.SIGWINCH)
                     step(b"x")
