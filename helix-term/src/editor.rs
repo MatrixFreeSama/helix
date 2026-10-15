@@ -45,7 +45,7 @@ impl Editor {
         let backend = CrosstermBackend::new(stdout());
 
         let mut terminal = Terminal::new(backend)?;
-        let size = terminal::size().unwrap();
+        let size = terminal::size()?;
         let area = Rect::new(0, 0, size.0, size.1);
 
         let mut editor = Editor {
@@ -420,7 +420,7 @@ impl Editor {
         }
     }
 
-    pub async fn event_loop(&mut self) {
+    pub async fn event_loop(&mut self) -> Result<(), Error> {
         let mut reader = EventStream::new();
         let keymap = keymap::default();
 
@@ -527,10 +527,11 @@ impl Editor {
                 Some(Ok(_)) => {
                     // unhandled event
                 }
-                Some(Err(x)) => panic!(x),
+                Some(Err(error)) => return Err(error.into()),
                 None => break,
             }
         }
+        Ok(())
     }
 
     pub async fn run(&mut self) -> Result<(), Error> {
@@ -548,7 +549,7 @@ impl Editor {
             hook(info);
         }));
 
-        self.event_loop().await;
+        let event_result = self.event_loop().await;
 
         // reset cursor shape
         write!(stdout, "\x1B[2 q");
@@ -557,7 +558,7 @@ impl Editor {
 
         disable_raw_mode()?;
 
-        Ok(())
+        event_result
     }
 }
 
