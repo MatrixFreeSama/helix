@@ -134,6 +134,12 @@ impl State {
                         "destination is not a regular file",
                     ));
                 }
+                if metadata.permissions().readonly() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "destination is read-only",
+                    ));
+                }
                 Some(metadata)
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
