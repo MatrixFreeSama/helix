@@ -335,6 +335,7 @@ impl Transaction {
             if !self.changes.apply(&mut state.doc) {
                 return false;
             }
+            state.revision = state.revision.wrapping_add(1);
 
             if let Some(syntax) = &mut state.syntax {
                 // TODO: no unwrap
