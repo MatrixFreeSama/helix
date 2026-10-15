@@ -8,6 +8,9 @@ use unicode_segmentation::UnicodeSegmentation;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Quit,
+    ForceQuit,
+    Write,
+    WriteQuit,
 }
 
 struct CommandSpec {
@@ -16,10 +19,12 @@ struct CommandSpec {
 }
 
 // Every completion is an executable command. No sample command list.
-const COMMANDS: &[CommandSpec] = &[CommandSpec {
-    name: "q",
-    action: Action::Quit,
-}];
+const COMMANDS: &[CommandSpec] = &[
+    CommandSpec { name: "q", action: Action::Quit },
+    CommandSpec { name: "q!", action: Action::ForceQuit },
+    CommandSpec { name: "w", action: Action::Write },
+    CommandSpec { name: "wq", action: Action::WriteQuit },
+];
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Outcome {
@@ -59,6 +64,15 @@ impl Prompt {
         self.invalid
     }
 
+    pub fn mark_invalid(&mut self) {
+        self.invalid = true;
+    }
+
+    /// An optional filename following a space, shared by :w and :wq.
+    pub fn argument(&self) -> Option<&str> {
+        self.line.split_once(' ').map(|(_, path)| path.trim()).filter(|path| !path.is_empty())
+    }
+
     pub fn cursor_cells(&self) -> usize {
         1 + self.line[..self.cursor]
             .graphemes(true)
@@ -85,7 +99,7 @@ impl Prompt {
     fn matches(&self) -> impl Iterator<Item = &'static CommandSpec> + '_ {
         COMMANDS
             .iter()
-            .filter(move |cmd| cmd.name.starts_with(&self.line))
+            .filter(move |cmd| !self.line.contains(' ') && cmd.name.starts_with(&self.line))
     }
 
     pub fn candidates(&self) -> impl Iterator<Item = (usize, &'static str)> + '_ {
@@ -123,10 +137,12 @@ impl Prompt {
         if let Some(selected) = self.selected {
             self.matches().nth(selected).map(|command| command.action)
         } else {
-            COMMANDS
-                .iter()
-                .find(|command| command.name == self.line)
-                .map(|command| command.action)
+            let name = self.line.split_once(' ').map_or(self.line.as_str(), |(n, _)| n);
+            let command = COMMANDS.iter().find(|command| command.name == name)?;
+            if self.argument().is_some() && !matches!(command.action, Action::Write | Action::WriteQuit) {
+                return None;
+            }
+            Some(command.action)
         }
     }
 
@@ -229,7 +245,7 @@ mod tests {
         let mut prompt = Prompt::new();
         assert_eq!(
             prompt.candidates().map(|(_, s)| s).collect::<Vec<_>>(),
-            vec!["q"]
+            vec!["q", "q!", "w", "wq"]
         );
         prompt.handle(key(KeyCode::Tab));
         assert_eq!(prompt.selection(), Some(0));
@@ -244,6 +260,22 @@ mod tests {
             prompt.handle(key(KeyCode::Enter)),
             Outcome::Execute(Action::Quit)
         );
+    }
+
+    #[test]
+    fn save_commands_share_the_registry_and_reject_quit_arguments() {
+        let mut prompt = Prompt::new();
+        for c in "w file with spaces.txt".chars() {
+            prompt.handle(key(KeyCode::Char(c)));
+        }
+        assert_eq!(prompt.argument(), Some("file with spaces.txt"));
+        assert_eq!(prompt.handle(key(KeyCode::Enter)), Outcome::Execute(Action::Write));
+        let mut prompt = Prompt::new();
+        for c in "q unwanted.txt".chars() {
+            prompt.handle(key(KeyCode::Char(c)));
+        }
+        assert_eq!(prompt.handle(key(KeyCode::Enter)), Outcome::Edited);
+        assert!(prompt.invalid());
     }
 
     #[test]
