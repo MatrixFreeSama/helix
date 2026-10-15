@@ -488,50 +488,40 @@ impl Editor {
                     }
                     if let Some(view) = &mut self.view {
                         let mode = view.state.mode();
-                        if mode == Mode::Normal
-                            && event.code == KeyCode::Char('q')
-                            && !event.modifiers.intersects(
-                                crossterm::event::KeyModifiers::CONTROL
-                                    | crossterm::event::KeyModifiers::ALT,
-                            )
-                        {
-                            // No normal-mode shortcut may lose unsaved work.
-                            if view.state.is_dirty() {
-                                self.prompt = Some(Prompt::new());
-                                self.prompt
-                                    .as_mut()
-                                    .unwrap()
-                                    .mark_error("Unsaved changes: use :w, :wq or :q!".to_string());
-                                self.render();
-                                continue;
+                        match keymap::resolve_terminal(&keymap, mode, event) {
+                            Some(keymap::TerminalBinding::Quit) => {
+                                if view.state.is_dirty() {
+                                    self.prompt = Some(Prompt::new());
+                                    self.prompt
+                                        .as_mut()
+                                        .unwrap()
+                                        .mark_error("Unsaved changes: use :w, :wq or :q!".to_string());
+                                    self.render();
+                                } else {
+                                    break;
+                                }
                             }
-                            break;
-                        }
-                        if mode == Mode::Normal
-                            && event.code == KeyCode::Char(':')
-                            && !event.modifiers.intersects(
-                                crossterm::event::KeyModifiers::CONTROL
-                                    | crossterm::event::KeyModifiers::ALT,
-                            )
-                        {
-                            self.prompt = Some(Prompt::new());
-                            self.render();
-                            continue;
-                        }
-                        if let Some(command) = keymap::lookup(&keymap, mode, event) {
-                            command(view, 1);
-                            view.ensure_cursor_in_view();
-                            self.render();
-                        } else if mode == Mode::Insert {
-                            if let KeyEvent {
-                                code: KeyCode::Char(c),
-                                ..
-                            } = event
-                            {
-                                commands::insert_char(view, c);
+                            Some(keymap::TerminalBinding::OpenPrompt) => {
+                                self.prompt = Some(Prompt::new());
+                                self.render();
+                            }
+                            Some(keymap::TerminalBinding::Document(command)) => {
+                                command(view, 1);
                                 view.ensure_cursor_in_view();
                                 self.render();
                             }
+                            None if mode == Mode::Insert => {
+                                if let KeyEvent {
+                                    code: KeyCode::Char(c),
+                                    ..
+                                } = event
+                                {
+                                    commands::insert_char(view, c);
+                                    view.ensure_cursor_in_view();
+                                    self.render();
+                                }
+                            }
+                            None => (),
                         }
                     }
                 }
