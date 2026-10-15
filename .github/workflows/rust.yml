@@ -6,6 +6,11 @@ on:
   push:
     branches: [master]
 
+# Only the newest revision of a PR needs the expensive full stress suite.
+concurrency:
+  group: industrial-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   statuses: write
