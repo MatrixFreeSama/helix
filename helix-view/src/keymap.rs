@@ -90,6 +90,30 @@ pub use crossterm::event::{KeyCode, KeyEvent as Key, KeyModifiers as Modifiers};
 type Keymap = HashMap<Vec<Key>, Command>;
 pub type Keymaps = HashMap<state::Mode, Keymap>;
 
+/// A terminal keystroke resolves to exactly one typed effect. Document
+/// commands retain the existing zero-allocation borrowed-slice lookup.
+#[cfg(feature = "term")]
+#[derive(Clone, Copy)]
+pub enum TerminalBinding {
+    Document(Command),
+    OpenPrompt,
+    Quit,
+}
+
+#[cfg(feature = "term")]
+#[inline]
+pub fn resolve_terminal(keymaps: &Keymaps, mode: state::Mode, event: Key) -> Option<TerminalBinding> {
+    if mode == state::Mode::Normal && event.modifiers == Modifiers::NONE {
+        match event.code {
+            KeyCode::Char(':') => return Some(TerminalBinding::OpenPrompt),
+            KeyCode::Char('q') => return Some(TerminalBinding::Quit),
+            _ => {}
+        }
+    }
+    lookup(keymaps, mode, event).map(TerminalBinding::Document)
+}
+
+
 // Centralized dispatch, with zero temporary heap allocation on either mode.
 // Insert-mode controls deliberately ignore modifier bits, matching the original
 // implementation. The existing normal-mode keymap uses borrowed slice lookup.
@@ -319,6 +343,29 @@ mod test {
         for code in [KeyCode::PageUp, KeyCode::PageDown] {
             assert!(lookup(&maps, state::Mode::Normal, key(code, Modifiers::NONE)).is_some());
         }
+    }
+
+    #[test]
+    fn terminal_effects_have_one_mode_aware_dispatch_entry() {
+        let maps = default();
+        assert!(matches!(
+            resolve_terminal(&maps, state::Mode::Normal, key(KeyCode::Char('q'), Modifiers::NONE)),
+            Some(TerminalBinding::Quit)
+        ));
+        assert!(matches!(
+            resolve_terminal(&maps, state::Mode::Normal, key(KeyCode::Char(':'), Modifiers::NONE)),
+            Some(TerminalBinding::OpenPrompt)
+        ));
+        assert!(resolve_terminal(
+            &maps,
+            state::Mode::Insert,
+            key(KeyCode::Char('q'), Modifiers::NONE)
+        ).is_none());
+        assert!(resolve_terminal(
+            &maps,
+            state::Mode::Goto,
+            key(KeyCode::Char('q'), Modifiers::NONE)
+        ).is_some());
     }
 
     #[test]
