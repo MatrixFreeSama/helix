@@ -29,6 +29,15 @@ pub struct View {
 }
 
 impl View {
+    pub fn empty(size: (u16, u16)) -> Self {
+        Self {
+            state: State::new(helix_core::Rope::new()),
+            first_line: 0,
+            size,
+            theme: Theme::default(),
+        }
+    }
+
     pub fn open(path: PathBuf, size: (u16, u16)) -> Result<Self, Error> {
         let theme = Theme::default();
         let state = State::load(path, theme.scopes())?;
