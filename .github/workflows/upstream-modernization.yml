@@ -52,7 +52,7 @@ jobs:
         id: pin
         run: echo "sha=$(git -C modern rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Install upstream required Rust toolchain
-        run: rustup toolchain install 1.90.0 --profile minimal
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
       - name: Check upstream formatting
         working-directory: modern
         run: cargo +1.90.0 fmt --all --check
