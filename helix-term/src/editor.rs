@@ -27,8 +27,6 @@ use tui::{backend::CrosstermBackend, buffer::Buffer as Surface, layout::Rect, st
 
 type Terminal = tui::Terminal<CrosstermBackend<std::io::Stdout>>;
 
-static EX: smol::Executor = smol::Executor::new();
-
 pub struct Editor {
     terminal: Terminal,
     view: Option<View>,
