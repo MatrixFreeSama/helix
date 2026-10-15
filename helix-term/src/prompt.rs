@@ -198,7 +198,13 @@ impl Prompt {
                     .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
             {
                 self.line.insert(self.cursor, c);
-                self.cursor += c.len_utf8();
+                let end = self.cursor + c.len_utf8();
+                self.cursor = self
+                    .line
+                    .grapheme_indices(true)
+                    .map(|(index, _)| index)
+                    .find(|index| *index >= end)
+                    .unwrap_or(self.line.len());
                 self.changed();
             }
             _ => (),
@@ -268,6 +274,19 @@ mod tests {
         prompt.handle(key(KeyCode::End));
         prompt.handle(key(KeyCode::Char('界')));
         assert_eq!(prompt.text(), "🙂x界");
+    }
+
+    #[test]
+    fn inserting_before_leading_combining_mark_keeps_cursor_on_grapheme_boundary() {
+        let mut prompt = Prompt::new();
+        prompt.handle(key(KeyCode::Char('\u{301}')));
+        prompt.handle(key(KeyCode::Home));
+        prompt.handle(key(KeyCode::Char('e')));
+        assert_eq!(prompt.text(), "e\u{301}");
+        assert_eq!(prompt.cursor, prompt.text().len());
+        prompt.handle(key(KeyCode::Backspace));
+        assert_eq!(prompt.text(), "");
+        assert_eq!(prompt.cursor, 0);
     }
 
     #[test]
