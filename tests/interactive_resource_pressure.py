@@ -288,6 +288,7 @@ def main(binary):
 
                 # Quit intentionally ends the process; do not demand an ACK
                 # from a PTY that may close before we can read its last frame.
+                press(master, proc, b"\x1b")  # Leave Insert; q is text there, not Quit.
                 os.write(master, b"q")
                 proc.wait(timeout=10)
                 if proc.returncode != 0:
