@@ -432,35 +432,35 @@ impl Editor {
                         let outcome = self.prompt.as_mut().unwrap().handle(event);
                         match outcome {
                             Outcome::Cancelled => self.prompt = None,
-                            Outcome::Execute(action) => {
-                                match action {
-                                    Action::Quit => {
-                                        if self.view.as_ref().map_or(false, |v| v.state.is_dirty()) {
-                                            self.prompt.as_mut().unwrap().mark_error(
-                                                "Unsaved changes: use :w, :wq or :q!".to_string(),
-                                            );
-                                        } else {
-                                            break;
-                                        }
-                                    }
-                                    Action::ForceQuit => break,
-                                    Action::Write | Action::WriteQuit => {
-                                        let filename = self.prompt.as_ref()
-                                            .and_then(|prompt| prompt.argument())
-                                            .map(PathBuf::from);
-                                        let result = self.view.as_mut().unwrap().state.save(filename);
-                                        if let Err(error) = result {
-                                            self.prompt.as_mut().unwrap().mark_error(format!(
-                                                "Save failed: {}", error
-                                            ));
-                                        } else if action == Action::WriteQuit {
-                                            break;
-                                        } else {
-                                            self.prompt = None;
-                                        }
+                            Outcome::Execute(action) => match action {
+                                Action::Quit => {
+                                    if self.view.as_ref().map_or(false, |v| v.state.is_dirty()) {
+                                        self.prompt.as_mut().unwrap().mark_error(
+                                            "Unsaved changes: use :w, :wq or :q!".to_string(),
+                                        );
+                                    } else {
+                                        break;
                                     }
                                 }
-                            }
+                                Action::ForceQuit => break,
+                                Action::Write | Action::WriteQuit => {
+                                    let filename = self
+                                        .prompt
+                                        .as_ref()
+                                        .and_then(|prompt| prompt.argument())
+                                        .map(PathBuf::from);
+                                    let result = self.view.as_mut().unwrap().state.save(filename);
+                                    if let Err(error) = result {
+                                        self.prompt.as_mut().unwrap().mark_error(format!(
+                                            "Save failed: {}", error
+                                        ));
+                                    } else if action == Action::WriteQuit {
+                                        break;
+                                    } else {
+                                        self.prompt = None;
+                                    }
+                                }
+                            },
                             Outcome::Edited => (),
                         }
                         self.render();
