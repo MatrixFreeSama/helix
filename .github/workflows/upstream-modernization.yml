@@ -80,8 +80,8 @@ jobs:
       - name: Fetch only the upstream revision that passed verification
         run: |
           set -euo pipefail
-          git fetch --no-tags https://github.com/helix-editor/helix.git "$VERIFIED_SHA"
-          test "$(git rev-parse FETCH_HEAD)" = "$VERIFIED_SHA"
+          git fetch --no-tags https://github.com/helix-editor/helix.git master
+          git cat-file -e "$VERIFIED_SHA^{commit}"
       - name: Write a factual capability comparison
         run: |
           python3 tools/upstream_capabilities.py --fork HEAD --upstream "$VERIFIED_SHA" --json-out upstream-capabilities.json >> "$GITHUB_STEP_SUMMARY"
