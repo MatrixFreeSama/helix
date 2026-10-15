@@ -112,17 +112,25 @@ impl State {
         let path = new_path
             .or_else(|| self.path.clone())
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing file name"))?;
-        let parent = path.parent().filter(|p| !p.as_os_str().is_empty())
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
 
         // Never silently replace a symlink with an unrelated regular file.
         let previous = match fs::symlink_metadata(&path) {
             Ok(metadata) => {
                 if metadata.file_type().is_symlink() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "refusing to replace symbolic link"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "refusing to replace symbolic link",
+                    ));
                 }
                 if !metadata.is_file() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "destination is not a regular file"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "destination is not a regular file",
+                    ));
                 }
                 Some(metadata)
             }
@@ -130,14 +138,22 @@ impl State {
             Err(error) => return Err(error),
         };
 
-        let name = path.file_name().ok_or_else(|| io::Error::new(
-            io::ErrorKind::InvalidInput, "invalid destination file name"
-        ))?;
+        let name = path.file_name().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "invalid destination file name")
+        })?;
         let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let temp_name = format!(".{}.hx-{}-{}.tmp", name.to_string_lossy(), std::process::id(), sequence);
+        let temp_name = format!(
+            ".{}.hx-{}-{}.tmp",
+            name.to_string_lossy(),
+            std::process::id(),
+            sequence
+        );
         let temp_path = parent.join(temp_name);
         let guard = PendingSave(temp_path.clone());
-        let mut file = OpenOptions::new().write(true).create_new(true).open(&temp_path)?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)?;
         if let Some(metadata) = previous {
             file.set_permissions(metadata.permissions())?;
         }
