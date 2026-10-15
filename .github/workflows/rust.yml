@@ -5,6 +5,11 @@ on:
   push:
     branches: [master]
 
+permissions:
+  contents: read
+  statuses: write
+  issues: write
+
 jobs:
   integration-and-stress:
     runs-on: ubuntu-24.04
@@ -19,21 +24,75 @@ jobs:
           rustup toolchain install stable --profile minimal --component rustfmt
           rustup default stable
       - name: Rust formatting
+        id: format
         run: cargo fmt --all -- --check
       - name: Compile workspace
+        id: compile
         run: cargo check --workspace --all-features
       - name: Regression tests including million-key stress
+        id: unit
         run: cargo test --workspace --all-features -- --nocapture
       - name: 3M-event release performance comparison
+        id: bench
         run: cargo run --release -p helix-view --features term --example keymap_stress
       - name: Build actual Helix terminal binary
+        id: binary
         run: cargo build --release -p helix-term --bin hx
       - name: Live CPU withdrawal and external resource-pressure PTY test
+        id: pressure
         run: python3 tests/interactive_resource_pressure.py target/release/hx
       - name: Empty, tiny and 70k-line real terminal navigation
+        id: nav
         run: python3 tests/navigation_pty_boundaries.py target/release/hx
       - name: Real command prompt UTF-8 and narrow-terminal boundaries
+        id: prompt
         run: python3 tests/prompt_pty_boundaries.py target/release/hx
+
+      - name: Report reproducible acceptance to commit and PR
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const outcomes = {
+              format: "${{ steps.format.outcome }}",
+              compile: "${{ steps.compile.outcome }}",
+              unit: "${{ steps.unit.outcome }}",
+              benchmark: "${{ steps.bench.outcome }}",
+              binary: "${{ steps.binary.outcome }}",
+              resource_pressure: "${{ steps.pressure.outcome }}",
+              navigation_pty: "${{ steps.nav.outcome }}",
+              prompt_pty: "${{ steps.prompt.outcome }}"
+            };
+            const accepted = Object.values(outcomes).every(x => x === "success");
+            const fs = require("fs");
+            const load = file => {
+              try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+              catch { return null; }
+            };
+            const pressure = load("dirty-business-results.json");
+            const prompt = load("prompt-pty-results.json");
+            const measured = Object.entries(pressure?.scenarios ?? {})
+              .map(([phase, s]) => `${phase}: P99 ${s.p99_ms} ms, max ${s.max_ms} ms`)
+              .join("\n");
+            const body = [
+              "### Historical PR #4: independent acceptance",
+              ...Object.entries(outcomes).map(([step, state]) => `- ${step}: **${state}**`),
+              "",
+              "First PTY output only, **not full-frame latency**.",
+              measured ? `\`\`\`text\n${measured}\n\`\`\`` : "No pressure measurements collected.",
+              prompt ? `Prompt PTY: ${prompt.cases?.length ?? 0} cases, failure: ${prompt.failure ?? "none"}` : "No prompt PTY result.",
+              `Run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            ].join("\n");
+            await github.rest.repos.createCommitStatus({
+              ...context.repo, sha: context.payload.pull_request.head.sha,
+              state: accepted ? "success" : "failure",
+              context: "industrial/historical-pr4",
+              description: accepted ? "8/8 compile and PTY acceptance stages passed" : "Acceptance failed or skipped; inspect PR report"
+            });
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: context.issue.number, body
+            });
       - name: Keep dirty-business measurements even on failure
         if: always()
         uses: actions/upload-artifact@v4
